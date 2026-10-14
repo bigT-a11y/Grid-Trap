@@ -290,16 +290,16 @@
   /* ---------- state ---------- */
   function freshState() {
     return {
-      you: { x: 1, y: 6 },
-      cpu: { x: 6, y: 1 },
+      you: { x: 4, y: 6 },
+      cpu: { x: 4, y: 1 },
       blockers: [
-        { id: 0, owner: 'you', x: 3, y: 5 },
-        { id: 1, owner: 'you', x: 2, y: 4 },
-        { id: 2, owner: 'you', x: 4, y: 4 },
+        { id: 0, owner: 'you', x: 3, y: 6 },
+        { id: 1, owner: 'you', x: 2, y: 6 },
+        { id: 2, owner: 'you', x: 4, y: 6 },
         { id: 3, owner: 'you', x: 5, y: 6 },
-        { id: 4, owner: 'cpu', x: 4, y: 2 },
-        { id: 5, owner: 'cpu', x: 5, y: 3 },
-        { id: 6, owner: 'cpu', x: 3, y: 3 },
+        { id: 4, owner: 'cpu', x: 4, y: 1 },
+        { id: 5, owner: 'cpu', x: 5, y: 1 },
+        { id: 6, owner: 'cpu', x: 3, y: 1 },
         { id: 7, owner: 'cpu', x: 2, y: 1 }
       ],
       h: Array.from({ length: N + 1 }, () => Array(N).fill(false)),
