@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Wall Trap — King &amp; Blockers</title>
+<title>Wall Trap — Online</title>
 <style>
   :root { color-scheme: dark; --bg:#101722; --panel:#192434; --line:#314158; --text:#edf3ff; --muted:#aab8cc; --accent:#70d6ff; }
   * { box-sizing: border-box; }
@@ -11,20 +11,19 @@
   main { max-width:1080px; margin:0 auto; padding:22px; }
   h1 { margin:0 0 6px; font-size:clamp(25px,4vw,38px); }
   .subtitle { color:var(--muted); margin:0 0 20px; line-height:1.5; }
-  .layout { display:grid; grid-template-columns:minmax(300px, 1fr) minmax(260px, 340px); gap:20px; align-items:start; }
+  .layout { display:grid; grid-template-columns:minmax(300px, 1fr) minmax(280px, 360px); gap:20px; align-items:start; }
   .board-wrap,.panel { background:rgba(25,36,52,.95); border:1px solid var(--line); border-radius:16px; padding:14px; box-shadow:0 12px 35px #0004; }
   canvas { width:100%; height:auto; display:block; border-radius:8px; touch-action:manipulation; cursor:pointer; }
   .panel { display:flex; flex-direction:column; gap:15px; }
   .status { padding:12px; border-radius:10px; background:#101a28; border:1px solid var(--line); line-height:1.45; min-height:68px; }
-  .status.sacrifice { border-color:#ff5f6d; background:#2a1218; }
   .turn { font-weight:bold; color:var(--accent); }
   .controls { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
-  .controls-3 { display:grid; grid-template-columns:1fr 1fr 1fr; gap:6px; }
-  .controls-5 { display:grid; grid-template-columns:repeat(5, 1fr); gap:6px; }
-  button, select { font:inherit; color:var(--text); background:#26364b; border:1px solid #435875; border-radius:9px; padding:10px 11px; cursor:pointer; width:100%; }
+  .controls-4 { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+  button, select, input { font:inherit; color:var(--text); background:#26364b; border:1px solid #435875; border-radius:9px; padding:10px 11px; cursor:pointer; width:100%; }
   button:hover:not(:disabled) { background:#334b68; }
   button.active { background:#17637c; border-color:#70d6ff; box-shadow:0 0 0 1px #70d6ff55 inset; }
   button:disabled { opacity:.45; cursor:not-allowed; }
+  input { cursor:text; }
   .section-title { font-weight:bold; margin-bottom:7px; }
   .hint,.rules { color:var(--muted); font-size:13px; line-height:1.55; }
   .legend { display:flex; flex-wrap:wrap; gap:12px; color:var(--muted); font-size:13px; align-items:center; }
@@ -37,1518 +36,1052 @@
   .counter { background:#101a28; border:1px solid var(--line); border-radius:10px; padding:9px 10px; font-size:13px; text-align:center; }
   .counter b { display:block; font-size:20px; margin-top:2px; }
   .counter.draw b { color:#ffd166; }
-  .counter small { color:var(--muted); font-size:11px; }
-  input[type="range"] { accent-color: var(--accent); }
-  #replayBar { background:#101a28; border:1px solid #4a7ba8; border-radius:10px; padding:10px; }
-  #replayBar .controls { grid-template-columns:repeat(5, 1fr); }
-  label.check { display:flex; align-items:center; gap:8px; font-size:13px; color:var(--muted); cursor:pointer; margin-top:8px; }
-  label.check input { width:auto; accent-color: var(--accent); }
+  .badge { display:inline-block; padding:3px 9px; border-radius:12px; background:#17637c; color:#edf3ff; font-size:12px; font-weight:bold; }
+  .badge.orange { background:#8a5a1a; }
   @media (max-width:760px) { main{padding:12px} .layout{grid-template-columns:1fr} .panel{order:2} }
 </style>
 </head>
 <body>
 <main>
-  <h1>Wall Trap — King &amp; Blockers</h1>
-  <p class="subtitle">Wall economy: 10 walls each. Smash to reclaim walls. Lose a Blocker, lose two walls. Trap the enemy King to win.</p>
+  <h1>Wall Trap — Online</h1>
+  <p class="subtitle">King &amp; Blockers, player vs player. Sign in, find a match, and trap the enemy King. Threefold repetition is a draw.</p>
   <div class="layout">
     <section class="board-wrap">
+      <div style="margin-bottom:10px; display:flex; gap:10px; align-items:center; min-height:26px;">
+        <span id="colorBadge" class="badge" style="display:none;"></span>
+        <span id="oppBadge" class="badge" style="display:none; background:#2c3e55;"></span>
+      </div>
       <canvas id="board" width="800" height="800" aria-label="Game board"></canvas>
       <div class="legend" style="margin-top:12px">
-        <span><i class="dot you"></i><span id="legendYou">Your King</span></span>
-        <span><i class="dot cpu"></i><span id="legendCpu">Computer King</span></span>
-        <span><i class="sq you-b"></i>Your Blockers</span>
-        <span><i class="sq cpu-b"></i>Computer Blockers</span>
+        <span><i class="dot you"></i>Blue King</span>
+        <span><i class="dot cpu"></i>Orange King</span>
+        <span><i class="sq you-b"></i>Blue Blockers</span>
+        <span><i class="sq cpu-b"></i>Orange Blockers</span>
       </div>
     </section>
     <aside class="panel">
-      <div class="status" id="status"><span class="turn">Your turn.</span> Move, build, smash, or relocate.</div>
+      <div class="status" id="status">Sign in to play online, or use local mode.</div>
 
-      <div id="replayBar" style="display:none">
-        <div class="section-title">Replay</div>
-        <div class="controls">
-          <button id="repFirst">⏮</button>
-          <button id="repPrev">◀</button>
-          <button id="repPlay">▶</button>
-          <button id="repNext">▶</button>
-          <button id="repLast">⏭</button>
+      <div id="authPanel">
+        <div class="section-title">Account</div>
+        <div id="authSignedOut">
+          <input id="emailInput" type="email" placeholder="email" autocomplete="email">
+          <input id="passwordInput" type="password" placeholder="password" style="margin-top:6px" autocomplete="current-password">
+          <div class="controls" style="margin-top:6px">
+            <button id="signInBtn">Sign in</button>
+            <button id="signUpBtn">Sign up</button>
+          </div>
         </div>
-        <button id="repClose" style="margin-top:8px">Exit replay</button>
-        <p class="hint" id="repInfo">Step 0 / 0</p>
+        <div id="authSignedIn" style="display:none">
+          <p class="hint" style="margin:0 0 8px">Signed in as <b id="userEmail"></b></p>
+          <div class="controls">
+            <button id="findMatchBtn">🔍 Find Match</button>
+            <button id="signOutBtn">Sign out</button>
+          </div>
+          <p class="hint" id="matchStatus" style="margin:8px 0 0"></p>
+        </div>
       </div>
 
       <div>
-        <div class="section-title">Game mode</div>
-        <div class="controls-3">
-          <button id="modeHvc" class="active">👤 vs 🤖</button>
-          <button id="modeCvc">🤖 vs 🤖</button>
-          <button id="modePvp">👤 vs 👤</button>
-        </div>
-        <label class="check" id="flipRow" style="display:none">
-          <input type="checkbox" id="flipToggle"> Flip board between turns
-        </label>
-      </div>
-
-      <div id="humanControls">
-        <div class="section-title">Action</div>
-        <div class="controls-5">
-          <button id="moveMode" class="active">♟</button>
-          <button id="blockerMode">⬛</button>
-          <button id="wallMode">▰</button>
-          <button id="smashMode">💥</button>
-          <button id="relocateMode">↻</button>
-        </div>
-        <p class="hint" id="actionHint">Click a highlighted tile to move.</p>
-      </div>
-
-      <div id="cvcControls" style="display:none">
-        <div class="section-title">Auto-play</div>
+        <div class="section-title">Mode</div>
         <div class="controls">
-          <button id="playPause">⏸ Pause</button>
-          <button id="stepOnce">⏭ Step</button>
+          <button id="onlineModeBtn" class="active">🌐 Online</button>
+          <button id="localModeBtn">👥 Local</button>
         </div>
-        <label class="hint" style="display:block;margin-top:8px">
-          Delay: <span id="speedLabel">600 ms</span>
-          <input type="range" id="speed" min="100" max="2000" step="100" value="600" style="width:100%">
-        </label>
+      </div>
+
+      <div id="actionPanel">
+        <div class="section-title">Your action</div>
+        <div class="controls-4">
+          <button id="moveMode" class="active">♟ King</button>
+          <button id="blockerMode">⬛ Blocker</button>
+          <button id="wallMode">▰ Wall</button>
+          <button id="smashMode">💥 Smash</button>
+        </div>
+        <p class="hint" id="actionHint">Click any highlighted tile to move your King there.</p>
       </div>
 
       <div>
-        <div class="section-title">Materials</div>
+        <div class="section-title">Blockers / Repetition</div>
         <div class="counters">
-          <div class="counter">P1 Blockers<b id="blockerYou">4</b></div>
-          <div class="counter">P2 Blockers<b id="blockerCpu">4</b></div>
-          <div class="counter">P1 Walls<small>pool / max</small><b id="wallYou">10 / 10</b></div>
-          <div class="counter">P2 Walls<small>pool / max</small><b id="wallCpu">10 / 10</b></div>
+          <div class="counter">Blue<b id="blockerYou">4</b></div>
+          <div class="counter">Orange<b id="blockerCpu">4</b></div>
           <div class="counter draw" style="grid-column:span 2">Repetition<b id="repCount">0 / 3</b></div>
         </div>
       </div>
 
       <div>
-        <div class="section-title">Computer lookahead</div>
-        <select id="depth">
-          <option value="2">2 plies — fast</option>
-          <option value="3">3 plies</option>
-          <option value="4" selected>4 plies — balanced</option>
-          <option value="5">5 plies — strong</option>
-          <option value="6">6 plies — slow</option>
-          <option value="7">7 plies — very slow</option>
-          <option value="8">8 plies — extreme</option>
-        </select>
+        <div class="section-title">Online players</div>
+        <div class="counter"><b id="onlineCount">0</b></div>
       </div>
 
-      <div>
-        <div class="section-title">Match</div>
-        <div class="controls-3">
-          <button id="undo" disabled>Undo</button>
-          <button id="replayBtn" disabled>Replay</button>
-          <button id="restart">Restart</button>
+      <div id="matchPanel" style="display:none">
+        <div class="controls">
+          <button id="resignBtn" style="background:#5a2530;border-color:#8a3a48">Resign</button>
+          <button id="leaveBtn">Leave game</button>
         </div>
       </div>
 
       <div>
-        <div class="section-title">Last action</div>
-        <div class="log" id="log">The game is ready.</div>
+        <div class="section-title">Status</div>
+        <div class="log" id="log">Sign in to begin.</div>
       </div>
 
       <div>
         <div class="section-title">Rules</div>
         <div class="rules">
-          • Each side has <b>1 King</b>, <b>4 Blockers</b>, and <b>10 walls</b>.<br>
-          • Each turn do <b>one</b> of: move your King one square (incl. diagonals), move one of your Blockers one square, place a wall from your pool, smash an unprotected wall beside your King, or relocate one of your walls to a new edge.<br>
-          • <b>Smash gives back one wall</b> to the wall's original owner, capped at their max.<br>
-          • Losing a Blocker reduces your <b>max walls by 2</b>. If you have more walls than the new max, your pool is discarded first, then you choose which on-board walls to remove.<br>
+          • Each side has <b>1 King</b> and <b>4 Blockers</b>.<br>
+          • On your turn: move your King one square (incl. diagonals), move one of your Blockers one square, place one wall on an empty edge, or <b>smash</b> an unprotected wall beside your King.<br>
           • A wall is <b>protected</b> if any Blocker (either side) touches any part of it, including a single shared corner.<br>
           • After every action, any Blocker with <b>no free adjacent square</b> is destroyed.<br>
-          • A King is only <b>trapped</b> if it has no legal moves <i>and</i> no smashable walls.<br>
-          • Threefold repetition is a draw.<br><br>
-          <b>PvP flip:</b> in 👤 vs 👤 mode, enable "Flip board between turns" so the board rotates so each player sees their own King at the bottom.
+          • A King is <b>trapped</b> only if it has no legal moves <i>and</i> no smashable walls.<br>
+          • <b>Draw by repetition:</b> same position (pieces, walls, side to move) three times = draw.<br><br>
+          <b>Wall placement:</b> point at the board — the nearest edge lights up. Click to build there.
         </div>
       </div>
     </aside>
   </div>
 </main>
-<script>
-(() => {
-  const canvas = document.getElementById('board');
-  const ctx = canvas.getContext('2d');
-  const N = 8, SIZE = 800, CELL = SIZE / N;
+<script type="module">
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
-  const statusEl = document.getElementById('status');
-  const logEl = document.getElementById('log');
-  const moveBtn = document.getElementById('moveMode');
-  const blockerBtn = document.getElementById('blockerMode');
-  const wallBtn = document.getElementById('wallMode');
-  const smashBtn = document.getElementById('smashMode');
-  const relocateBtn = document.getElementById('relocateMode');
-  const undoBtn = document.getElementById('undo');
-  const replayBtn = document.getElementById('replayBtn');
-  const depthSel = document.getElementById('depth');
-  const hintEl = document.getElementById('actionHint');
-  const humanControls = document.getElementById('humanControls');
-  const cvcControls = document.getElementById('cvcControls');
-  const modeHvcBtn = document.getElementById('modeHvc');
-  const modeCvcBtn = document.getElementById('modeCvc');
-  const modePvpBtn = document.getElementById('modePvp');
-  const flipRow = document.getElementById('flipRow');
-  const flipToggle = document.getElementById('flipToggle');
-  const playPauseBtn = document.getElementById('playPause');
-  const stepOnceBtn = document.getElementById('stepOnce');
-  const speedSlider = document.getElementById('speed');
-  const speedLabel = document.getElementById('speedLabel');
-  const legendYou = document.getElementById('legendYou');
-  const legendCpu = document.getElementById('legendCpu');
-  const blockerYouEl = document.getElementById('blockerYou');
-  const blockerCpuEl = document.getElementById('blockerCpu');
-  const wallYouEl = document.getElementById('wallYou');
-  const wallCpuEl = document.getElementById('wallCpu');
-  const repCountEl = document.getElementById('repCount');
+const SUPABASE_URL = 'https://sxyhdjcazwnzjzlycuzc.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_Egy_oOe3qewdV_EZDThvcA_FfEvBvcv';
+const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
-  const replayBar = document.getElementById('replayBar');
-  const repFirstBtn = document.getElementById('repFirst');
-  const repPrevBtn = document.getElementById('repPrev');
-  const repPlayBtn = document.getElementById('repPlay');
-  const repNextBtn = document.getElementById('repNext');
-  const repLastBtn = document.getElementById('repLast');
-  const repCloseBtn = document.getElementById('repClose');
-  const repInfo = document.getElementById('repInfo');
+const N = 8, SIZE = 800, CELL = SIZE / N;
+const REP_LIMIT = 3;
 
-  let state;
-  let mode = 'move';
-  let busy = false;
-  let history = [];
-  let hoverEdge = null;
-  let pendingEdge = null;
-  let selectedBlockerId = null;
-  let relocateSource = null;
-  let lastPointerType = 'mouse';
+/* ---------- DOM refs ---------- */
+const canvas = document.getElementById('board');
+const ctx = canvas.getContext('2d');
+const statusEl = document.getElementById('status');
+const logEl = document.getElementById('log');
+const moveBtn = document.getElementById('moveMode');
+const blockerBtn = document.getElementById('blockerMode');
+const wallBtn = document.getElementById('wallMode');
+const smashBtn = document.getElementById('smashMode');
+const hintEl = document.getElementById('actionHint');
+const blockerYouEl = document.getElementById('blockerYou');
+const blockerCpuEl = document.getElementById('blockerCpu');
+const repCountEl = document.getElementById('repCount');
+const onlineCountEl = document.getElementById('onlineCount');
+const colorBadge = document.getElementById('colorBadge');
+const oppBadge = document.getElementById('oppBadge');
 
-  let gameMode = 'hvc';
-  let aiPlaying = false;
-  let cvcTimer = null;
-  let cvcSpeed = 600;
+const emailInput = document.getElementById('emailInput');
+const passwordInput = document.getElementById('passwordInput');
+const signInBtn = document.getElementById('signInBtn');
+const signUpBtn = document.getElementById('signUpBtn');
+const signOutBtn = document.getElementById('signOutBtn');
+const findMatchBtn = document.getElementById('findMatchBtn');
+const authSignedOut = document.getElementById('authSignedOut');
+const authSignedIn = document.getElementById('authSignedIn');
+const userEmailEl = document.getElementById('userEmail');
+const matchStatusEl = document.getElementById('matchStatus');
 
-  let flipEnabled = false;
+const onlineModeBtn = document.getElementById('onlineModeBtn');
+const localModeBtn = document.getElementById('localModeBtn');
+const matchPanel = document.getElementById('matchPanel');
+const resignBtn = document.getElementById('resignBtn');
+const leaveBtn = document.getElementById('leaveBtn');
 
-  const REP_LIMIT = 3;
-  let repetitionMap = new Map();
+/* ---------- global state ---------- */
+let state = freshState();
+let appMode = 'local';             // 'online' | 'local'
+let myColor = null;                // 'blue' | 'orange' | null
+let currentUser = null;
+let currentGame = null;
+let gameChannel = null;
+let presenceChannel = null;
+let mode = 'move';
+let hoverEdge = null;
+let pendingEdge = null;
+let selectedBlockerId = null;
+let repetitionMap = new Map();
+let lastPointerType = 'mouse';
+let busy = false;
 
-  let gameSnapshots = [];
-  let gameActions = [];
-  let replayMode = false;
-  let replayIndex = 0;
-  let replayPlaying = false;
-  let replayTimer = null;
-  let savedLiveState = null;
-  let savedLiveRepMap = null;
+const other = c => (c === 'blue' ? 'orange' : 'blue');
 
-  const other = who => (who === 'you' ? 'cpu' : 'you');
+/* =====================================================================
+   GAME LOGIC — absolute colors
+   ===================================================================== */
+function freshState() {
+  return {
+    blue:   { x: 4, y: 7 },
+    orange: { x: 4, y: 0 },
+    blockers: [
+      { id: 0, owner: 'blue',   x: 3, y: 6 },
+      { id: 1, owner: 'blue',   x: 2, y: 6 },
+      { id: 2, owner: 'blue',   x: 4, y: 6 },
+      { id: 3, owner: 'blue',   x: 5, y: 6 },
+      { id: 4, owner: 'orange', x: 4, y: 1 },
+      { id: 5, owner: 'orange', x: 5, y: 1 },
+      { id: 6, owner: 'orange', x: 3, y: 1 },
+      { id: 7, owner: 'orange', x: 2, y: 1 }
+    ],
+    h: Array.from({ length: N + 1 }, () => Array(N).fill(false)),
+    v: Array.from({ length: N }, () => Array(N + 1).fill(false)),
+    turn: 'blue',
+    over: false,
+    winner: null,
+    moveNumber: 0
+  };
+}
+function snapshot() { return JSON.parse(JSON.stringify(state)); }
+function inside(x, y) { return x >= 0 && y >= 0 && x < N && y < N; }
 
-  function displayName(who) {
-    if (gameMode === 'pvp') return who === 'you' ? 'P1' : 'P2';
-    if (gameMode === 'cvc') return who === 'you' ? 'Blue' : 'Orange';
-    return who === 'you' ? 'You' : 'Computer';
+function occupantAt(x, y) {
+  if (state.blue.x === x && state.blue.y === y) return 'blue-king';
+  if (state.orange.x === x && state.orange.y === y) return 'orange-king';
+  for (const b of state.blockers) {
+    if (b.x === x && b.y === y) return 'blocker';
   }
-  function winMessage(who) {
-    if (gameMode === 'pvp') return displayName(who) + ' wins!';
-    if (gameMode === 'cvc') return displayName(who) + ' wins!';
-    return who === 'you' ? 'You win!' : 'Computer wins!';
-  }
-  function pieceLabel(who) {
-    if (gameMode === 'hvc') return who === 'you' ? 'YOU' : 'CPU';
-    return who === 'you' ? 'P1' : 'P2';
-  }
+  return null;
+}
 
-  function isHumanSide(side) {
-    if (gameMode === 'cvc') return false;
-    if (gameMode === 'hvc') return side === 'you';
-    return true;
-  }
-  function isHumanTurn() {
-    if (gameMode === 'cvc') return false;
-    if (gameMode === 'hvc') return state.turn === 'you';
-    return true;
-  }
-  function currentPlayer() { return state.turn; }
+function wallExists(e) { return e.type === 'h' ? state.h[e.y][e.x] : state.v[e.y][e.x]; }
+function setWall(e, val) { if (e.type === 'h') state.h[e.y][e.x] = val; else state.v[e.y][e.x] = val; }
+function sameEdge(a, b) { return a && b && a.type === b.type && a.x === b.x && a.y === b.y; }
 
-  function actionHintFor() {
-    return 'Move your King, move a Blocker, place a wall, smash, or relocate.';
+function wallCells(e) {
+  if (e.type === 'h') {
+    const cells = [];
+    if (e.y - 1 >= 0) cells.push({ x: e.x, y: e.y - 1 });
+    if (e.y < N)     cells.push({ x: e.x, y: e.y });
+    return cells;
   }
+  const cells = [];
+  if (e.x - 1 >= 0) cells.push({ x: e.x - 1, y: e.y });
+  if (e.x < N)      cells.push({ x: e.x, y: e.y });
+  return cells;
+}
 
-  function boardFlipped() {
-    return gameMode === 'pvp' && flipEnabled && state.turn === 'cpu';
-  }
-  function visualXY(x, y) {
-    if (!boardFlipped()) return { x, y };
-    return { x: N - 1 - x, y: N - 1 - y };
-  }
-  function visualEdge(e) {
-    if (!boardFlipped()) return e;
-    if (e.type === 'h') return { type: 'h', x: N - 1 - e.x, y: N - e.y };
-    return { type: 'v', x: N - e.x, y: N - 1 - e.y };
-  }
-
-  /* ---------- state ---------- */
-  function freshState() {
-    return {
-      you: { x: 4, y: 7 },
-      cpu: { x: 4, y: 0 },
-      blockers: [
-        { id: 0, owner: 'you', x: 3, y: 6 },
-        { id: 1, owner: 'you', x: 2, y: 6 },
-        { id: 2, owner: 'you', x: 4, y: 6 },
-        { id: 3, owner: 'you', x: 5, y: 6 },
-        { id: 4, owner: 'cpu', x: 4, y: 1 },
-        { id: 5, owner: 'cpu', x: 5, y: 1 },
-        { id: 6, owner: 'cpu', x: 3, y: 1 },
-        { id: 7, owner: 'cpu', x: 2, y: 1 }
-      ],
-      h: Array.from({ length: N + 1 }, () => Array(N).fill(false)),
-      v: Array.from({ length: N }, () => Array(N + 1).fill(false)),
-      hOwner: Array.from({ length: N + 1 }, () => Array(N).fill(null)),
-      vOwner: Array.from({ length: N }, () => Array(N + 1).fill(null)),
-      wallPool: { you: 10, cpu: 10 },
-      maxWalls: { you: 10, cpu: 10 },
-      turn: 'you',
-      over: false,
-      sacrifice: null,
-      sacrificeQueue: null
-    };
-  }
-  function snapshot() { return JSON.parse(JSON.stringify(state)); }
-  function restore(s) { state = JSON.parse(JSON.stringify(s)); }
-  function inside(x, y) { return x >= 0 && y >= 0 && x < N && y < N; }
-
-  function occupantAt(x, y) {
-    if (state.you.x === x && state.you.y === y) return 'you-king';
-    if (state.cpu.x === x && state.cpu.y === y) return 'cpu-king';
-    for (const b of state.blockers) if (b.x === x && b.y === y) return 'blocker';
-    return null;
-  }
-
-  /* ---------- position hash ---------- */
-  function positionKey() {
-    let h1 = 0x811c9dc5 | 0, h2 = 0xdeadbeef | 0;
-    const mix = v => { h1 = Math.imul(h1 ^ v, 16777619); h2 = Math.imul(h2 ^ v, 2246822519); };
-    mix(state.you.x * 8 + state.you.y);
-    mix(state.cpu.x * 8 + state.cpu.y + 64);
-    for (let y = 0; y <= N; y++) { let bits = 0; for (let x = 0; x < N; x++) if (state.h[y][x]) bits |= (1 << x); mix(y * 256 + bits); }
-    for (let y = 0; y < N; y++) { let bits = 0; for (let x = 0; x <= N; x++) if (state.v[y][x]) bits |= (1 << x); mix(y * 512 + bits + 100); }
-    for (const b of state.blockers) mix(b.x * 8 + b.y + (b.owner === 'you' ? 200 : 400));
-    mix(state.wallPool.you * 3 + state.wallPool.cpu * 7 + 600);
-    if (state.turn === 'cpu') mix(1000);
-    return (h1 >>> 0) * 65536 + ((h2 >>> 0) & 0xFFFF);
-  }
-  function recordPosition() {
-    const k = positionKey();
-    const c = (repetitionMap.get(k) || 0) + 1;
-    repetitionMap.set(k, c);
-    return c;
-  }
-  function repetitionCount() { return repetitionMap.get(positionKey()) || 0; }
-  function resetRepetition() { repetitionMap = new Map(); recordPosition(); }
-
-  /* ---------- walls ---------- */
-  function getWallOwner(e) { return e.type === 'h' ? state.hOwner[e.y][e.x] : state.vOwner[e.y][e.x]; }
-  function wallExists(e) { return getWallOwner(e) !== null; }
-  function setWall(e, owner) {
-    if (e.type === 'h') {
-      state.hOwner[e.y][e.x] = owner;
-      state.h[e.y][e.x] = owner !== null;
-    } else {
-      state.vOwner[e.y][e.x] = owner;
-      state.v[e.y][e.x] = owner !== null;
+function wallTouchCells(e) {
+  const cells = wallCells(e);
+  if (e.type === 'h') {
+    if (e.x - 1 >= 0) {
+      if (e.y - 1 >= 0) cells.push({ x: e.x - 1, y: e.y - 1 });
+      if (e.y < N)     cells.push({ x: e.x - 1, y: e.y });
+    }
+    if (e.x + 1 < N) {
+      if (e.y - 1 >= 0) cells.push({ x: e.x + 1, y: e.y - 1 });
+      if (e.y < N)     cells.push({ x: e.x + 1, y: e.y });
+    }
+  } else {
+    if (e.y - 1 >= 0) {
+      if (e.x - 1 >= 0) cells.push({ x: e.x - 1, y: e.y - 1 });
+      if (e.x < N)     cells.push({ x: e.x, y: e.y - 1 });
+    }
+    if (e.y + 1 < N) {
+      if (e.x - 1 >= 0) cells.push({ x: e.x - 1, y: e.y + 1 });
+      if (e.x < N)     cells.push({ x: e.x, y: e.y + 1 });
     }
   }
-  function countWallsOnBoard(who) {
-    let n = 0;
-    for (let y = 0; y <= N; y++) for (let x = 0; x < N; x++) if (state.hOwner[y][x] === who) n++;
-    for (let y = 0; y < N; y++) for (let x = 0; x <= N; x++) if (state.vOwner[y][x] === who) n++;
-    return n;
-  }
-  function sameEdge(a, b) { return a && b && a.type === b.type && a.x === b.x && a.y === b.y; }
+  return cells;
+}
 
-  function wallCells(e) {
-    if (e.type === 'h') {
-      const c = [];
-      if (e.y - 1 >= 0) c.push({ x: e.x, y: e.y - 1 });
-      if (e.y < N) c.push({ x: e.x, y: e.y });
-      return c;
+function isWallProtected(e) {
+  const cells = wallTouchCells(e);
+  for (const c of cells) {
+    if (!inside(c.x, c.y)) continue;
+    for (const b of state.blockers) {
+      if (b.x === c.x && b.y === c.y) return true;
     }
-    const c = [];
-    if (e.x - 1 >= 0) c.push({ x: e.x - 1, y: e.y });
-    if (e.x < N) c.push({ x: e.x, y: e.y });
-    return c;
   }
-  function wallTouchCells(e) {
-    const c = wallCells(e);
-    if (e.type === 'h') {
-      if (e.x - 1 >= 0) {
-        if (e.y - 1 >= 0) c.push({ x: e.x - 1, y: e.y - 1 });
-        if (e.y < N) c.push({ x: e.x - 1, y: e.y });
-      }
-      if (e.x + 1 < N) {
-        if (e.y - 1 >= 0) c.push({ x: e.x + 1, y: e.y - 1 });
-        if (e.y < N) c.push({ x: e.x + 1, y: e.y });
-      }
-    } else {
-      if (e.y - 1 >= 0) {
-        if (e.x - 1 >= 0) c.push({ x: e.x - 1, y: e.y - 1 });
-        if (e.x < N) c.push({ x: e.x, y: e.y - 1 });
-      }
-      if (e.y + 1 < N) {
-        if (e.x - 1 >= 0) c.push({ x: e.x - 1, y: e.y + 1 });
-        if (e.x < N) c.push({ x: e.x, y: e.y + 1 });
-      }
-    }
-    return c;
-  }
-  function isWallProtected(e) {
-    for (const c of wallTouchCells(e)) {
-      if (!inside(c.x, c.y)) continue;
-      for (const b of state.blockers) if (b.x === c.x && b.y === c.y) return true;
-    }
+  return false;
+}
+
+function canSmashWall(color, e) {
+  if (!wallExists(e)) return false;
+  if (isWallProtected(e)) return false;
+  const king = state[color];
+  if (e.type === 'h') {
+    if (king.y === e.y && king.x === e.x) return true;
+    if (king.y + 1 === e.y && king.x === e.x) return true;
     return false;
   }
-  function canSmashWall(who, e) {
-    if (!wallExists(e)) return false;
-    if (isWallProtected(e)) return false;
-    const king = state[who];
-    if (e.type === 'h') {
-      if (king.y === e.y && king.x === e.x) return true;
-      if (king.y + 1 === e.y && king.x === e.x) return true;
-      return false;
-    }
-    if (king.x === e.x && king.y === e.y) return true;
-    if (king.x + 1 === e.x && king.y === e.y) return true;
-    return false;
+  if (king.x === e.x && king.y === e.y) return true;
+  if (king.x + 1 === e.x && king.y === e.y) return true;
+  return false;
+}
+
+function smashableWalls(color) {
+  const out = [];
+  const king = state[color];
+  const cands = [
+    { type: 'h', x: king.x, y: king.y },
+    { type: 'h', x: king.x, y: king.y + 1 },
+    { type: 'v', x: king.x, y: king.y },
+    { type: 'v', x: king.x + 1, y: king.y }
+  ];
+  for (const e of cands) {
+    if (canSmashWall(color, e)) out.push(e);
   }
-  function smashableWalls(who) {
-    const out = [];
-    const king = state[who];
-    for (const e of [
+  return out;
+}
+
+function boundaryWall(x, y, d) {
+  if (d === 'N') return y === 0 || state.h[y][x];
+  if (d === 'S') return y === N - 1 || state.h[y + 1][x];
+  if (d === 'W') return x === 0 || state.v[y][x];
+  return x === N - 1 || state.v[y][x + 1];
+}
+
+function stepOK(x, y, dx, dy) {
+  const nx = x + dx, ny = y + dy;
+  if (!inside(nx, ny)) return false;
+  if (dx && dy) {
+    const h1 = dx > 0 ? !boundaryWall(x, y, 'E') : !boundaryWall(x, y, 'W');
+    const v1 = dy > 0 ? !boundaryWall(x, y, 'S') : !boundaryWall(x, y, 'N');
+    const h2 = dx > 0 ? !boundaryWall(x, ny, 'E') : !boundaryWall(x, ny, 'W');
+    const v2 = dy > 0 ? !boundaryWall(nx, y, 'S') : !boundaryWall(nx, y, 'N');
+    return (h1 && v2) || (v1 && h2);
+  }
+  if (dx === 1) return !boundaryWall(x, y, 'E');
+  if (dx === -1) return !boundaryWall(x, y, 'W');
+  if (dy === 1) return !boundaryWall(x, y, 'S');
+  if (dy === -1) return !boundaryWall(x, y, 'N');
+  return false;
+}
+
+function kingMoves(color) {
+  const p = state[color], out = [];
+  for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+    if (!dx && !dy) continue;
+    const nx = p.x + dx, ny = p.y + dy;
+    if (!inside(nx, ny)) continue;
+    if (!stepOK(p.x, p.y, dx, dy)) continue;
+    if (occupantAt(nx, ny)) continue;
+    out.push({ x: nx, y: ny });
+  }
+  return out;
+}
+function isKingTrapped(color) {
+  return kingMoves(color).length === 0 && smashableWalls(color).length === 0;
+}
+
+function blockerMoves(b) {
+  const out = [];
+  for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+    if (!dx && !dy) continue;
+    const nx = b.x + dx, ny = b.y + dy;
+    if (!inside(nx, ny)) continue;
+    if (!stepOK(b.x, b.y, dx, dy)) continue;
+    if (occupantAt(nx, ny)) continue;
+    out.push({ x: nx, y: ny });
+  }
+  return out;
+}
+
+function countEscapes(b) {
+  let n = 0;
+  for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+    if (!dx && !dy) continue;
+    if (!stepOK(b.x, b.y, dx, dy)) continue;
+    if (occupantAt(b.x + dx, b.y + dy)) continue;
+    n++;
+  }
+  return n;
+}
+function isBlockerTrapped(b) { return countEscapes(b) === 0; }
+
+function removeTrappedBlockers() {
+  if (!state.blockers.length) return [];
+  const removed = [];
+  const kept = [];
+  for (const b of state.blockers) {
+    if (isBlockerTrapped(b)) removed.push({ ...b });
+    else kept.push(b);
+  }
+  if (removed.length) state.blockers = kept;
+  return removed;
+}
+
+function applyAction(a) {
+  const savedBlockers = state.blockers.map(b => ({ ...b }));
+  let savedKingPos = null;
+  if (a.kind === 'move') {
+    savedKingPos = { ...state[a.who] };
+    state[a.who] = { x: a.x, y: a.y };
+  } else if (a.kind === 'move-blocker') {
+    const b = state.blockers.find(x => x.id === a.blockerId);
+    if (b) { b.x = a.x; b.y = a.y; }
+  } else if (a.kind === 'wall') {
+    setWall(a.e, true);
+  } else if (a.kind === 'smash') {
+    if (isWallProtected(a.e)) return { undo: () => {}, removed: [] };
+    setWall(a.e, false);
+  }
+  const removed = removeTrappedBlockers();
+
+  const undo = () => {
+    if (a.kind === 'move') state[a.who] = savedKingPos;
+    else if (a.kind === 'wall') setWall(a.e, false);
+    else if (a.kind === 'smash') setWall(a.e, true);
+    state.blockers = savedBlockers;
+  };
+  return { undo, removed };
+}
+
+/* ---------- repetition ---------- */
+function positionKey() {
+  let h1 = 0x811c9dc5 | 0;
+  let h2 = 0xdeadbeef | 0;
+  const mix = v => {
+    h1 = Math.imul(h1 ^ v, 16777619);
+    h2 = Math.imul(h2 ^ v, 2246822519);
+  };
+  mix(state.blue.x * 8 + state.blue.y);
+  mix(state.orange.x * 8 + state.orange.y + 64);
+  for (let y = 0; y <= N; y++) {
+    let bits = 0;
+    for (let x = 0; x < N; x++) if (state.h[y][x]) bits |= (1 << x);
+    mix(y * 256 + bits);
+  }
+  for (let y = 0; y < N; y++) {
+    let bits = 0;
+    for (let x = 0; x <= N; x++) if (state.v[y][x]) bits |= (1 << x);
+    mix(y * 512 + bits + 100);
+  }
+  for (const b of state.blockers) {
+    mix(b.x * 8 + b.y + (b.owner === 'blue' ? 200 : 400));
+  }
+  if (state.turn === 'orange') mix(1000);
+  return (h1 >>> 0) * 65536 + ((h2 >>> 0) & 0xFFFF);
+}
+function recordPosition() {
+  const k = positionKey();
+  repetitionMap.set(k, (repetitionMap.get(k) || 0) + 1);
+}
+function repetitionCount() { return repetitionMap.get(positionKey()) || 0; }
+function resetRepetition() {
+  repetitionMap = new Map();
+  recordPosition();
+}
+
+/* =====================================================================
+   RENDERING
+   ===================================================================== */
+function strokeEdge(e, color, width, alpha) {
+  const c = edgeCoords(e);
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.strokeStyle = color;
+  ctx.lineWidth = width;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(c.x1, c.y1);
+  ctx.lineTo(c.x2, c.y2);
+  ctx.stroke();
+  ctx.restore();
+}
+function roundedSquare(cx, cy, size, r, fill, stroke, strokeWidth) {
+  const x = cx - size / 2, y = cy - size / 2;
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + size - r, y);
+  ctx.quadraticCurveTo(x + size, y, x + size, y + r);
+  ctx.lineTo(x + size, y + size - r);
+  ctx.quadraticCurveTo(x + size, y + size, x + size - r, y + size);
+  ctx.lineTo(x + r, y + size);
+  ctx.quadraticCurveTo(x, y + size, x, y + size - r);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.closePath();
+  if (fill) { ctx.fillStyle = fill; ctx.fill(); }
+  if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = strokeWidth || 3; ctx.stroke(); }
+}
+
+function isInteractive() {
+  if (state.over) return false;
+  if (busy) return false;
+  if (appMode === 'local') return true;
+  if (appMode === 'online') return state.turn === myColor;
+  return false;
+}
+
+function draw() {
+  ctx.clearRect(0, 0, SIZE, SIZE);
+  for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+    ctx.fillStyle = ((x + y) % 2 === 0) ? '#dce7e8' : '#b4c8d0';
+    ctx.fillRect(x * CELL, y * CELL, CELL, CELL);
+    ctx.strokeStyle = '#8298a4'; ctx.lineWidth = 1;
+    ctx.strokeRect(x * CELL, y * CELL, CELL, CELL);
+    ctx.fillStyle = '#6c8290'; ctx.font = '12px Verdana'; ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+    ctx.fillText(String(y * N + x), x * CELL + 6, y * CELL + 5);
+  }
+
+  ctx.strokeStyle = '#15202c'; ctx.lineWidth = 10; ctx.lineCap = 'round';
+  for (let y = 1; y < N; y++) for (let x = 0; x < N; x++) if (state.h[y][x]) {
+    ctx.beginPath(); ctx.moveTo(x * CELL, y * CELL); ctx.lineTo((x + 1) * CELL, y * CELL); ctx.stroke();
+  }
+  for (let y = 0; y < N; y++) for (let x = 1; x < N; x++) if (state.v[y][x]) {
+    ctx.beginPath(); ctx.moveTo(x * CELL, y * CELL); ctx.lineTo(x * CELL, (y + 1) * CELL); ctx.stroke();
+  }
+
+  ctx.lineWidth = 8; ctx.strokeStyle = '#15202c'; ctx.strokeRect(2, 2, SIZE - 4, SIZE - 4);
+
+  const interactive = isInteractive();
+
+  if (interactive && mode === 'wall') {
+    const e = pendingEdge || hoverEdge;
+    if (e) {
+      const occupied = wallExists(e);
+      strokeEdge(e, occupied ? '#ff5f6d' : '#ffd166', 13, occupied ? 0.5 : 0.8);
+    }
+  }
+
+  if (interactive && mode === 'smash') {
+    const king = state[state.turn];
+    const cands = [
       { type: 'h', x: king.x, y: king.y },
       { type: 'h', x: king.x, y: king.y + 1 },
       { type: 'v', x: king.x, y: king.y },
       { type: 'v', x: king.x + 1, y: king.y }
-    ]) if (canSmashWall(who, e)) out.push(e);
-    return out;
-  }
-  function boundaryWall(x, y, d) {
-    if (d === 'N') return y === 0 || state.h[y][x];
-    if (d === 'S') return y === N - 1 || state.h[y + 1][x];
-    if (d === 'W') return x === 0 || state.v[y][x];
-    return x === N - 1 || state.v[y][x + 1];
-  }
-  function stepOK(x, y, dx, dy) {
-    const nx = x + dx, ny = y + dy;
-    if (!inside(nx, ny)) return false;
-    if (dx && dy) {
-      const h1 = dx > 0 ? !boundaryWall(x, y, 'E') : !boundaryWall(x, y, 'W');
-      const v1 = dy > 0 ? !boundaryWall(x, y, 'S') : !boundaryWall(x, y, 'N');
-      const h2 = dx > 0 ? !boundaryWall(x, ny, 'E') : !boundaryWall(x, ny, 'W');
-      const v2 = dy > 0 ? !boundaryWall(nx, y, 'S') : !boundaryWall(nx, y, 'N');
-      return (h1 && v2) || (v1 && h2);
+    ];
+    for (const e of cands) {
+      if (!wallExists(e)) continue;
+      if (isWallProtected(e)) strokeEdge(e, '#ff5f6d', 15, 0.75);
+      else strokeEdge(e, '#5ee08a', 15, 0.9);
     }
-    if (dx === 1) return !boundaryWall(x, y, 'E');
-    if (dx === -1) return !boundaryWall(x, y, 'W');
-    if (dy === 1) return !boundaryWall(x, y, 'S');
-    if (dy === -1) return !boundaryWall(x, y, 'N');
-    return false;
   }
 
-  /* ---------- kings & blockers ---------- */
-  function kingMoves(who) {
-    const p = state[who], out = [];
-    for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
-      if (!dx && !dy) continue;
-      const nx = p.x + dx, ny = p.y + dy;
-      if (!inside(nx, ny)) continue;
-      if (!stepOK(p.x, p.y, dx, dy)) continue;
-      if (occupantAt(nx, ny)) continue;
-      out.push({ x: nx, y: ny });
-    }
-    return out;
-  }
-  function isKingTrapped(who) { return kingMoves(who).length === 0 && smashableWalls(who).length === 0; }
-  function blockerMoves(b) {
-    const out = [];
-    for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
-      if (!dx && !dy) continue;
-      const nx = b.x + dx, ny = b.y + dy;
-      if (!inside(nx, ny)) continue;
-      if (!stepOK(b.x, b.y, dx, dy)) continue;
-      if (occupantAt(nx, ny)) continue;
-      out.push({ x: nx, y: ny });
-    }
-    return out;
-  }
-  function countEscapes(b) {
-    let n = 0;
-    for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
-      if (!dx && !dy) continue;
-      if (!stepOK(b.x, b.y, dx, dy)) continue;
-      if (occupantAt(b.x + dx, b.y + dy)) continue;
-      n++;
-    }
-    return n;
-  }
-  function isBlockerTrapped(b) { return countEscapes(b) === 0; }
-  function removeTrappedBlockers() {
-    if (!state.blockers.length) return [];
-    const removed = [], kept = [];
-    for (const b of state.blockers) {
-      if (isBlockerTrapped(b)) removed.push({ ...b });
-      else kept.push(b);
-    }
-    if (removed.length) state.blockers = kept;
-    return removed;
-  }
-
-  /* ---------- edge geometry ---------- */
-  function edgeCoords(e) {
-    if (e.type === 'h') return { x1: e.x * CELL, y1: e.y * CELL, x2: (e.x + 1) * CELL, y2: e.y * CELL };
-    return { x1: e.x * CELL, y1: e.y * CELL, x2: e.x * CELL, y2: (e.y + 1) * CELL };
-  }
-  function edgeCenter(e) { return e.type === 'h' ? { x: e.x + 0.5, y: e.y } : { x: e.x, y: e.y + 0.5 }; }
-  function edgeLabel(e) {
-    const cells = wallCells(e);
-    if (cells.length === 2) return `between tiles ${cells[0].y * N + cells[0].x} and ${cells[1].y * N + cells[1].x}`;
-    return `on the border of tile ${cells[0].y * N + cells[0].x}`;
-  }
-  function edgeFromPoint(clientX, clientY) {
-    const r = canvas.getBoundingClientRect();
-    let px = (clientX - r.left) / r.width * SIZE;
-    let py = (clientY - r.top) / r.height * SIZE;
-    if (boardFlipped()) { px = SIZE - px; py = SIZE - py; }
-    if (px < 0) px = 0;
-    if (py < 0) py = 0;
-    if (px >= SIZE) px = SIZE - 0.001;
-    if (py >= SIZE) py = SIZE - 0.001;
-    const x = Math.floor(px / CELL), y = Math.floor(py / CELL);
-    const fx = px / CELL - x, fy = py / CELL - y;
-    const cands = [];
-    if (y > 0) cands.push({ d: fy, e: { type: 'h', x, y } });
-    if (y < N - 1) cands.push({ d: 1 - fy, e: { type: 'h', x, y: y + 1 } });
-    if (x > 0) cands.push({ d: fx, e: { type: 'v', x, y } });
-    if (x < N - 1) cands.push({ d: 1 - fx, e: { type: 'v', x: x + 1, y } });
-    if (!cands.length) return null;
-    cands.sort((a, b) => a.d - b.d);
-    return cands[0].e;
-  }
-  function clickToCell(clientX, clientY) {
-    const r = canvas.getBoundingClientRect();
-    let cx = Math.floor((clientX - r.left) / r.width * N);
-    let cy = Math.floor((clientY - r.top) / r.height * N);
-    if (boardFlipped()) { cx = N - 1 - cx; cy = N - 1 - cy; }
-    return { x: cx, y: cy };
-  }
-
-  /* ---------- applyAction ---------- */
-  function applyAction(a) {
-    const savedBlockers = state.blockers.map(b => ({ ...b }));
-    const savedPool = { ...state.wallPool };
-    const savedMax = { ...state.maxWalls };
-    const savedH = state.h.map(r => r.slice());
-    const savedV = state.v.map(r => r.slice());
-    const savedHOwner = state.hOwner.map(r => r.slice());
-    const savedVOwner = state.vOwner.map(r => r.slice());
-    let savedKingPos = null;
-
-    if (a.kind === 'move') {
-      savedKingPos = { ...state[a.who] };
-      state[a.who] = { x: a.x, y: a.y };
-    } else if (a.kind === 'move-blocker') {
-      const b = state.blockers.find(x => x.id === a.blockerId);
-      if (b) { b.x = a.x; b.y = a.y; }
-    } else if (a.kind === 'wall') {
-      if (state.wallPool[a.who] <= 0) return { undo: () => {}, removed: [], sacrifices: [] };
-      setWall(a.e, a.who);
-      state.wallPool[a.who]--;
-    } else if (a.kind === 'smash') {
-      if (isWallProtected(a.e)) return { undo: () => {}, removed: [], sacrifices: [] };
-      const wallOwner = getWallOwner(a.e);
-      setWall(a.e, null);
-      if (wallOwner) {
-        const total = state.wallPool[wallOwner] + countWallsOnBoard(wallOwner);
-        if (total < state.maxWalls[wallOwner]) state.wallPool[wallOwner]++;
+  if (interactive && mode === 'blocker') {
+    const myBlockerOwner = appMode === 'online' ? myColor : state.turn;
+    if (selectedBlockerId === null) {
+      for (const b of state.blockers) {
+        if (b.owner !== myBlockerOwner) continue;
+        roundedSquare((b.x + .5) * CELL, (b.y + .5) * CELL, 44, 9, null, 'rgba(112,214,255,0.55)', 2);
       }
-    } else if (a.kind === 'relocate') {
-      setWall(a.from, null);
-      setWall(a.to, a.who);
-    }
-
-    const removed = removeTrappedBlockers();
-    const sacrifices = [];
-
-    for (const side of ['you', 'cpu']) {
-      const lost = removed.filter(b => b.owner === side).length;
-      if (lost === 0) continue;
-      state.maxWalls[side] -= 2 * lost;
-      if (state.maxWalls[side] < 0) state.maxWalls[side] = 0;
-      const total = state.wallPool[side] + countWallsOnBoard(side);
-      let excess = total - state.maxWalls[side];
-      if (excess <= 0) continue;
-      const fromPool = Math.min(excess, state.wallPool[side]);
-      state.wallPool[side] -= fromPool;
-      excess -= fromPool;
-      if (excess > 0) {
-        if (isHumanSide(side) && !replayMode) sacrifices.push({ side, remaining: excess });
-        else autoRemoveWalls(side, excess);
-      }
-    }
-
-    const undo = () => {
-      if (a.kind === 'move') state[a.who] = savedKingPos;
-      state.blockers = savedBlockers;
-      state.wallPool = savedPool;
-      state.maxWalls = savedMax;
-      state.h = savedH;
-      state.v = savedV;
-      state.hOwner = savedHOwner;
-      state.vOwner = savedVOwner;
-    };
-
-    return { undo, removed, sacrifices };
-  }
-
-  function resolveEnd(mover) {
-    const opp = other(mover);
-    if (isKingTrapped(opp)) return { winner: mover };
-    if (isKingTrapped(mover)) return { winner: opp };
-    return null;
-  }
-
-  function commitSnapshot(description) {
-    gameSnapshots.push(snapshot());
-    gameActions.push(description);
-  }
-
-  /* =====================================================================
-     Human interactions
-     ===================================================================== */
-  function pushHistory() {
-    history.push({ state: snapshot(), rep: new Map(repetitionMap) });
-  }
-
-  function tryMove(x, y) {
-    const who = currentPlayer();
-    const legal = kingMoves(who).some(m => m.x === x && m.y === y);
-    if (!legal) { logEl.textContent = 'That is not a legal adjacent move.'; return; }
-    pushHistory();
-    const { removed, sacrifices } = applyAction({ kind: 'move', who, x, y });
-    const name = displayName(who);
-    finishHuman(`${name} moved King to tile ${y * N + x}.`, removed, sacrifices, `${name} moved King to tile ${y * N + x}`);
-  }
-
-  function tryBlockerMove(blockerId, x, y) {
-    const who = currentPlayer();
-    pushHistory();
-    const { removed, sacrifices } = applyAction({ kind: 'move-blocker', who, blockerId, x, y });
-    selectedBlockerId = null;
-    const name = displayName(who);
-    finishHuman(`${name} moved a Blocker to tile ${y * N + x}.`, removed, sacrifices, `${name} moved a Blocker to tile ${y * N + x}`);
-  }
-
-  function tryWall(e) {
-    if (!e) { logEl.textContent = 'That spot is outside the board.'; return; }
-    if (wallExists(e)) { logEl.textContent = 'There is already a wall on that edge.'; return; }
-    const who = currentPlayer();
-    if (state.wallPool[who] <= 0) { logEl.textContent = `${displayName(who)} has no walls in their pool.`; return; }
-    pushHistory();
-    const { removed, sacrifices } = applyAction({ kind: 'wall', who, e });
-    hoverEdge = null;
-    pendingEdge = null;
-    const name = displayName(who);
-    finishHuman(`${name} built a wall ${edgeLabel(e)}.`, removed, sacrifices, `${name} built a wall ${edgeLabel(e)}`);
-  }
-
-  function trySmash(e) {
-    if (!e) { logEl.textContent = 'That spot is outside the board.'; return; }
-    if (!wallExists(e)) { logEl.textContent = 'There is no wall there to smash.'; return; }
-    if (isWallProtected(e)) { logEl.textContent = 'That wall is protected by a Blocker.'; return; }
-    const who = currentPlayer();
-    if (!canSmashWall(who, e)) { logEl.textContent = 'Your King can only smash a wall directly beside it.'; return; }
-    pushHistory();
-    const { removed, sacrifices } = applyAction({ kind: 'smash', who, e });
-    const name = displayName(who);
-    finishHuman(`${name} smashed a wall ${edgeLabel(e)}.`, removed, sacrifices, `${name} smashed a wall ${edgeLabel(e)}`);
-  }
-
-  function tryRelocate(from, to) {
-    const who = currentPlayer();
-    if (!wallExists(from) || getWallOwner(from) !== who) { logEl.textContent = 'That is not your wall.'; return; }
-    if (wallExists(to)) { logEl.textContent = 'That edge already has a wall.'; return; }
-    pushHistory();
-    const { removed, sacrifices } = applyAction({ kind: 'relocate', who, from, to });
-    relocateSource = null;
-    const name = displayName(who);
-    finishHuman(`${name} relocated a wall ${edgeLabel(from)} → ${edgeLabel(to)}.`, removed, sacrifices,
-                `${name} relocated a wall ${edgeLabel(from)} → ${edgeLabel(to)}`);
-  }
-
-  function finishHuman(message, removedBlockers, sacrifices, replayDesc) {
-    if (removedBlockers && removedBlockers.length) {
-      message += ' ' + removedBlockers.map(b =>
-        `A ${b.owner === 'you' ? 'P1' : 'P2'} Blocker was destroyed.`).join(' ');
-    }
-    logEl.textContent = message;
-    undoBtn.disabled = true;
-    draw();
-    commitSnapshot(replayDesc);
-
-    const mover = state.turn;
-    const end = resolveEnd(mover);
-    if (end) {
-      state.over = true;
-      setStatus(`<span class="turn">${winMessage(end.winner)}</span> ${displayName(other(end.winner))} is trapped.`);
-      replayBtn.disabled = gameSnapshots.length < 2;
-      draw();
-      return;
-    }
-
-    if (sacrifices && sacrifices.length > 0) {
-      state.sacrificeQueue = sacrifices.slice(1);
-      state.sacrifice = sacrifices[0];
-      mode = 'sacrifice';
-      setStatus(`<span class="turn">Sacrifice.</span> ${displayName(state.sacrifice.side)} must remove ${state.sacrifice.remaining} wall(s).`);
-      updateActionButtons();
-      draw();
-      return;
-    }
-
-    advanceTurn(mover);
-  }
-
-  function advanceTurn(mover) {
-    state.turn = other(mover);
-    const rep = recordPosition();
-    if (rep >= REP_LIMIT) {
-      state.over = true;
-      setStatus('<span class="turn">Draw.</span> Position repeated three times.');
-      undoBtn.disabled = true;
-      replayBtn.disabled = gameSnapshots.length < 2;
-      draw();
-      return;
-    }
-
-    if (isHumanTurn()) {
-      setStatus(`<span class="turn">${displayName(state.turn)}'s turn.</span> ${actionHintFor()}`);
-      undoBtn.disabled = !history.length;
-      updateActionButtons();
-      draw();
     } else {
-      busy = true;
-      setStatus(`<span class="turn">${displayName(state.turn)} is thinking…</span>`);
-      draw();
-      setTimeout(() => aiTurn(state.turn), 60);
-    }
-  }
-
-  /* =====================================================================
-     AI
-     ===================================================================== */
-  const WIN = 1000000;
-  const DRAW_SCORE = 0;
-  const ABORT = { abort: true };
-  let nodeCount = 0;
-  let deadline = 0;
-  const searchPath = new Set();
-
-  function reachableCount(who) {
-    const p = state[who];
-    const opp = state[other(who)];
-    const blockerSet = new Set(state.blockers.map(b => b.x + b.y * N));
-    const seen = new Uint8Array(N * N);
-    const stack = [p.x + p.y * N];
-    seen[stack[0]] = 1;
-    let count = 0;
-    while (stack.length) {
-      const cur = stack.pop();
-      count++;
-      const x = cur % N, y = (cur - x) / N;
-      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
-        if (!dx && !dy) continue;
-        const nx = x + dx, ny = y + dy;
-        if (!inside(nx, ny)) continue;
-        const idx = nx + ny * N;
-        if (seen[idx]) continue;
-        if (!stepOK(x, y, dx, dy)) continue;
-        if (nx === opp.x && ny === opp.y) continue;
-        if (blockerSet.has(idx)) continue;
-        seen[idx] = 1;
-        stack.push(idx);
-      }
-    }
-    return count;
-  }
-  function pressureOn(who) {
-    const moves = kingMoves(who).length;
-    const smashes = smashableWalls(who).length;
-    const space = reachableCount(who);
-    return -(moves * 10 + space) + smashes * 6;
-  }
-  function autoRemoveWalls(who, count) {
-    for (let i = 0; i < count; i++) {
-      const myWalls = [];
-      for (let y = 0; y <= N; y++) for (let x = 0; x < N; x++) if (state.hOwner[y][x] === who) myWalls.push({ type: 'h', x, y });
-      for (let y = 0; y < N; y++) for (let x = 0; x <= N; x++) if (state.vOwner[y][x] === who) myWalls.push({ type: 'v', x, y });
-      let bestEdge = null, bestDelta = -Infinity;
-      const before = pressureOn(other(who));
-      for (const e of myWalls) {
-        setWall(e, null);
-        const after = pressureOn(other(who));
-        setWall(e, who);
-        const delta = after - before;
-        if (delta > bestDelta) { bestDelta = delta; bestEdge = e; }
-      }
-      if (bestEdge) setWall(bestEdge, null);
-    }
-  }
-
-  function isWallPlacementUseful(who, e) {
-    const oppBefore = pressureOn(other(who));
-    const myBefore = pressureOn(who);
-    const { undo } = applyAction({ kind: 'wall', who, e });
-    const oppAfter = pressureOn(other(who));
-    const myAfter = pressureOn(who);
-    undo();
-    const oppGain = oppAfter - oppBefore;
-    const myGain = myAfter - myBefore;
-    if (oppGain <= 0) return false;
-    if (myGain > oppGain + 4) return false;
-    return true;
-  }
-
-  function generateActions(who, moves, filterWalls) {
-    const acts = [];
-    for (const m of moves) acts.push({ kind: 'move', who, x: m.x, y: m.y });
-
-    const enemyKing = state[other(who)], myKing = state[who];
-    for (const e of smashableWalls(who)) acts.push({ kind: 'smash', who, e });
-
-    for (const b of state.blockers) {
-      if (b.owner !== who) continue;
-      const dE = Math.max(Math.abs(b.x - enemyKing.x), Math.abs(b.y - enemyKing.y));
-      const dM = Math.max(Math.abs(b.x - myKing.x), Math.abs(b.y - myKing.y));
-      const escapes = countEscapes(b);
-      const relevant = escapes <= 3 || dE <= 3 || dM <= 2;
-      if (!relevant) continue;
-      for (const m of blockerMoves(b)) acts.push({ kind: 'move-blocker', who, blockerId: b.id, x: m.x, y: m.y });
-    }
-
-    if (state.wallPool[who] > 0) {
-      const isNear = (cx, cy) => {
-        if (Math.abs(cx - enemyKing.x) <= 2 && Math.abs(cy - enemyKing.y) <= 2) return true;
-        if (Math.abs(cx - myKing.x) <= 2 && Math.abs(cy - myKing.y) <= 2) return true;
-        for (const b of state.blockers) if (Math.abs(cx - b.x) <= 1 && Math.abs(cy - b.y) <= 1) return true;
-        return false;
-      };
-      const wallCands = [];
-      for (let y = 1; y < N; y++) for (let x = 0; x < N; x++) if (!state.h[y][x] && (isNear(x, y - 1) || isNear(x, y))) wallCands.push({ type: 'h', x, y });
-      for (let y = 0; y < N; y++) for (let x = 1; x < N; x++) if (!state.v[y][x] && (isNear(x - 1, y) || isNear(x, y))) wallCands.push({ type: 'v', x, y });
-      if (filterWalls) for (const e of wallCands) if (isWallPlacementUseful(who, e)) acts.push({ kind: 'wall', who, e });
-      else for (const e of wallCands) acts.push({ kind: 'wall', who, e });
-    }
-
-    return acts;
-  }
-
-  function orderActions(acts, who) {
-    const enemyKing = state[other(who)];
-    for (const a of acts) {
-      if (a.kind === 'move') a.s = 40 - (Math.abs(a.x - enemyKing.x) + Math.abs(a.y - enemyKing.y));
-      else if (a.kind === 'smash') { const c = edgeCenter(a.e); a.s = 55 - Math.max(Math.abs(c.x - enemyKing.x), Math.abs(c.y - enemyKing.y)) * 2; }
-      else if (a.kind === 'move-blocker') { const b = state.blockers.find(x => x.id === a.blockerId); const escapesBefore = b ? countEscapes(b) : 0; a.s = 30 + (escapesBefore <= 2 ? 30 : 0) - Math.max(Math.abs(a.x - enemyKing.x), Math.abs(a.y - enemyKing.y)) * 3; }
-      else { const c = edgeCenter(a.e); a.s = 60 - Math.max(Math.abs(c.x - enemyKing.x), Math.abs(c.y - enemyKing.y)) * 4; }
-    }
-    acts.sort((a, b) => b.s - a.s);
-  }
-
-  function evaluatePosition(who) {
-    const opp = other(who);
-    const myMoves = kingMoves(who).length;
-    const oppMoves = kingMoves(opp).length;
-    const mySmashes = smashableWalls(who).length;
-    const oppSmashes = smashableWalls(opp).length;
-    if (oppMoves === 0 && oppSmashes === 0) return WIN;
-    if (myMoves === 0 && mySmashes === 0) return -WIN;
-
-    const mySpace = reachableCount(who), oppSpace = reachableCount(opp);
-    let score = (myMoves - oppMoves) * 12 + (mySpace - oppSpace) * 1.5;
-
-    const myKing = state[who], oppKing = state[opp];
-    for (const b of state.blockers) {
-      const dO = Math.max(Math.abs(b.x - oppKing.x), Math.abs(b.y - oppKing.y));
-      const dM = Math.max(Math.abs(b.x - myKing.x), Math.abs(b.y - myKing.y));
-      const esc = countEscapes(b);
-      if (b.owner === who) { score += 7 + Math.max(0, 6 - dO) * 2 - Math.max(0, 6 - dM) + Math.min(esc, 4) * 1.2; }
-      else { score -= 7 + Math.max(0, 6 - dM) * 2 - Math.max(0, 6 - dO) - Math.min(esc, 4) * 1.2; }
-    }
-    score += mySmashes * 3;
-    score -= oppSmashes * 3;
-    score += (state.wallPool[who] - state.wallPool[opp]) * 4;
-    return score;
-  }
-
-  function search(depth, alpha, beta, who) {
-    if ((++nodeCount & 255) === 0 && performance.now() > deadline) throw ABORT;
-    const posKey = positionKey();
-    if (searchPath.has(posKey)) return DRAW_SCORE;
-    if ((repetitionMap.get(posKey) || 0) >= REP_LIMIT - 1) return DRAW_SCORE;
-
-    const moves = kingMoves(who);
-    const smashes = smashableWalls(who);
-    if (moves.length === 0 && smashes.length === 0) return -WIN;
-    if (depth <= 0) return evaluatePosition(who);
-
-    searchPath.add(posKey);
-    let best = -Infinity;
-    try {
-      const acts = generateActions(who, moves, false);
-      orderActions(acts, who);
-      for (const a of acts) {
-        const { undo } = applyAction(a);
-        let score;
-        try { score = -search(depth - 1, -beta, -alpha, other(who)); }
-        finally { undo(); }
-        if (score > best) best = score;
-        if (best > alpha) alpha = best;
-        if (alpha >= beta) break;
-      }
-    } finally { searchPath.delete(posKey); }
-    return best;
-  }
-
-  function chooseAction(who, maxDepth, timeBudgetMs) {
-    nodeCount = 0;
-    deadline = performance.now() + timeBudgetMs;
-    searchPath.clear();
-
-    const rootMoves = kingMoves(who);
-    const rootSmashes = smashableWalls(who);
-    if (rootMoves.length === 0 && rootSmashes.length === 0) return null;
-
-    let acts = generateActions(who, rootMoves, true);
-    if (acts.length === 0) return null;
-    orderActions(acts, who);
-
-    let bestAction = acts[0], reachedDepth = 0;
-    for (let d = 1; d <= maxDepth; d++) {
-      let alpha = -Infinity, bestThis = null, bestScore = -Infinity, completed = true;
-      try {
-        for (const a of acts) {
-          const { undo } = applyAction(a);
-          let score;
-          try { score = -search(d - 1, -Infinity, -alpha, other(who)); }
-          finally { undo(); }
-          if (score > bestScore) { bestScore = score; bestThis = a; }
-          if (score > alpha) alpha = score;
-        }
-      } catch (err) { if (err !== ABORT) throw err; completed = false; }
-      if (!completed || !bestThis) break;
-      bestAction = bestThis;
-      reachedDepth = d;
-      acts = [bestThis].concat(acts.filter(a => a !== bestThis));
-      if (bestScore >= WIN - 1000) break;
-      if (performance.now() > deadline) break;
-    }
-    return { action: bestAction, depth: reachedDepth };
-  }
-
-  function describeAction(a) {
-    if (a.kind === 'move') return `moved King to tile ${a.y * N + a.x}`;
-    if (a.kind === 'move-blocker') return `moved a Blocker to tile ${a.y * N + a.x}`;
-    if (a.kind === 'smash') return `smashed a wall ${edgeLabel(a.e)}`;
-    if (a.kind === 'relocate') return `relocated a wall`;
-    return `built a wall ${edgeLabel(a.e)}`;
-  }
-
-  function aiTurn(who) {
-    if (state.over || replayMode) { busy = false; return; }
-    busy = true;
-    draw();
-
-    const maxDepth = parseInt(depthSel.value, 10) || 4;
-    const budgets = { 2: 1500, 3: 2000, 4: 3000, 5: 4000, 6: 5000, 7: 6000, 8: 7000 };
-    const budget = budgets[maxDepth] || 3000;
-    const t0 = performance.now();
-
-    let res = null;
-    try { res = chooseAction(who, maxDepth, budget); }
-    catch (err) { console.error(err); res = null; }
-    const elapsed = Math.round(performance.now() - t0);
-
-    if (!res || !res.action) {
-      state.over = true; busy = false;
-      setStatus(`<span class="turn">${winMessage(other(who))}</span> ${displayName(who)} has no legal actions.`);
-      replayBtn.disabled = gameSnapshots.length < 2;
-      draw();
-      return;
-    }
-
-    const a = res.action;
-    const { removed, sacrifices } = applyAction(a);
-    const desc = describeAction(a);
-    const name = displayName(who);
-
-    let msg = `${name} ${desc}`;
-    if (removed.length) msg += ` — ${removed.map(b => `${b.owner === 'you' ? 'P1' : 'P2'} Blocker destroyed`).join(', ')}`;
-    logEl.textContent = `${msg} (searched ${res.depth} plies in ${elapsed} ms).`;
-    commitSnapshot(`${name} ${desc}`);
-    busy = false;
-
-    const end = resolveEnd(who);
-    if (end) {
-      state.over = true;
-      setStatus(`<span class="turn">${winMessage(end.winner)}</span> ${displayName(other(end.winner))} is trapped.`);
-      replayBtn.disabled = gameSnapshots.length < 2;
-      draw();
-      return;
-    }
-
-    if (sacrifices && sacrifices.length > 0) {
-      state.sacrificeQueue = sacrifices.slice(1);
-      state.sacrifice = sacrifices[0];
-      state.turn = 'you';
-      mode = 'sacrifice';
-      setStatus(`<span class="turn">Sacrifice.</span> ${displayName(state.sacrifice.side)} must remove ${state.sacrifice.remaining} wall(s).`);
-      updateActionButtons();
-      draw();
-      return;
-    }
-
-    advanceTurn(who);
-  }
-
-  function scheduleAi() {
-    if (gameMode !== 'cvc' || !aiPlaying || state.over || replayMode) return;
-    clearTimeout(cvcTimer);
-    busy = true;
-    setStatus(`<span class="turn">${displayName(state.turn)} is thinking…</span>`);
-    draw();
-    cvcTimer = setTimeout(() => {
-      if (gameMode !== 'cvc' || !aiPlaying || state.over || replayMode) return;
-      aiTurn(state.turn);
-    }, cvcSpeed);
-  }
-
-  /* =====================================================================
-     Sacrifice click
-     ===================================================================== */
-  function processSacrificeClick(e) {
-    const sac = state.sacrifice;
-    if (!sac) return;
-    if (!e || !wallExists(e)) { logEl.textContent = 'Click one of your own walls to remove it.'; return; }
-    if (getWallOwner(e) !== sac.side) { logEl.textContent = `You can only sacrifice ${displayName(sac.side)}'s walls.`; return; }
-    setWall(e, null);
-    sac.remaining--;
-    if (sac.remaining > 0) {
-      setStatus(`<span class="turn">Sacrifice.</span> ${displayName(sac.side)} must remove ${sac.remaining} more.`);
-      draw();
-      return;
-    }
-    if (state.sacrificeQueue && state.sacrificeQueue.length > 0) {
-      state.sacrifice = state.sacrificeQueue.shift();
-      setStatus(`<span class="turn">Sacrifice.</span> ${displayName(state.sacrifice.side)} must remove ${state.sacrifice.remaining} wall(s).`);
-      draw();
-      return;
-    }
-    state.sacrifice = null;
-    state.sacrificeQueue = null;
-    mode = 'move';
-    setMode('move');
-
-    // The mover was the current player before the sacrifice began.
-    // state.turn is still the mover's turn.
-    const mover = state.turn;
-    advanceTurn(mover);
-  }
-
-  /* =====================================================================
-     Replay
-     ===================================================================== */
-  function enterReplay() {
-    if (gameSnapshots.length < 2 || busy) return;
-    if (aiPlaying) { aiPlaying = false; clearTimeout(cvcTimer); playPauseBtn.textContent = '▶ Resume'; }
-    savedLiveState = state;
-    savedLiveRepMap = new Map(repetitionMap);
-    replayMode = true;
-    replayIndex = 0;
-    replayPlaying = false;
-    state = JSON.parse(JSON.stringify(gameSnapshots[0]));
-    updateReplayUI();
-    draw();
-  }
-  function exitReplay() {
-    if (!replayMode) return;
-    replayMode = false;
-    replayPlaying = false;
-    clearTimeout(replayTimer);
-    state = savedLiveState;
-    savedLiveState = null;
-    repetitionMap = savedLiveRepMap;
-    savedLiveRepMap = null;
-    updateReplayUI();
-    draw();
-    if (gameMode === 'cvc' && !state.over && aiPlaying) scheduleAi();
-  }
-  function replayGoTo(idx) {
-    replayIndex = Math.max(0, Math.min(gameSnapshots.length - 1, idx));
-    state = JSON.parse(JSON.stringify(gameSnapshots[replayIndex]));
-    updateReplayUI();
-    draw();
-  }
-  function replayPlayToggle() {
-    if (replayPlaying) { replayPlaying = false; clearTimeout(replayTimer); repPlayBtn.textContent = '▶'; return; }
-    if (replayIndex >= gameSnapshots.length - 1) replayIndex = 0;
-    replayPlaying = true;
-    repPlayBtn.textContent = '⏸';
-    const step = () => {
-      if (!replayPlaying) return;
-      if (replayIndex >= gameSnapshots.length - 1) { replayPlaying = false; repPlayBtn.textContent = '▶'; return; }
-      replayGoTo(replayIndex + 1);
-      replayTimer = setTimeout(step, Math.max(120, cvcSpeed));
-    };
-    step();
-  }
-  function updateReplayUI() {
-    if (replayMode) {
-      replayBar.style.display = '';
-      humanControls.style.display = 'none';
-      cvcControls.style.display = 'none';
-      undoBtn.disabled = true;
-      replayBtn.disabled = true;
-      modeHvcBtn.disabled = true;
-      modeCvcBtn.disabled = true;
-      modePvpBtn.disabled = true;
-      repPlayBtn.textContent = replayPlaying ? '⏸' : '▶';
-      const total = gameSnapshots.length - 1;
-      const desc = replayIndex > 0 ? gameActions[replayIndex - 1] : 'Initial position';
-      repInfo.textContent = `Step ${replayIndex} / ${total} — ${desc}`;
-    } else {
-      replayBar.style.display = 'none';
-      modeHvcBtn.disabled = false;
-      modeCvcBtn.disabled = false;
-      modePvpBtn.disabled = false;
-      updateModeUI();
-    }
-  }
-  repFirstBtn.addEventListener('click', () => { clearTimeout(replayTimer); replayPlaying = false; replayGoTo(0); });
-  repPrevBtn.addEventListener('click', () => { clearTimeout(replayTimer); replayPlaying = false; replayGoTo(replayIndex - 1); });
-  repNextBtn.addEventListener('click', () => { clearTimeout(replayTimer); replayPlaying = false; replayGoTo(replayIndex + 1); });
-  repLastBtn.addEventListener('click', () => { clearTimeout(replayTimer); replayPlaying = false; replayGoTo(gameSnapshots.length - 1); });
-  repPlayBtn.addEventListener('click', replayPlayToggle);
-  repCloseBtn.addEventListener('click', exitReplay);
-
-  /* ---------- mode / restart ---------- */
-  function updateModeUI() {
-    modeHvcBtn.classList.toggle('active', gameMode === 'hvc');
-    modeCvcBtn.classList.toggle('active', gameMode === 'cvc');
-    modePvpBtn.classList.toggle('active', gameMode === 'pvp');
-    humanControls.style.display = gameMode !== 'cvc' ? '' : 'none';
-    cvcControls.style.display = gameMode === 'cvc' ? '' : 'none';
-    flipRow.style.display = gameMode === 'pvp' ? '' : 'none';
-
-    if (gameMode === 'pvp') { legendYou.textContent = 'Player 1'; legendCpu.textContent = 'Player 2'; }
-    else if (gameMode === 'cvc') { legendYou.textContent = 'Blue King'; legendCpu.textContent = 'Orange King'; }
-    else { legendYou.textContent = 'Your King'; legendCpu.textContent = 'Computer King'; }
-    updateActionButtons();
-  }
-  function updateActionButtons() {
-    const active = !replayMode && mode !== 'sacrifice' && !state.over && isHumanTurn() && !busy;
-    moveBtn.disabled = !active;
-    blockerBtn.disabled = !active;
-    wallBtn.disabled = !active;
-    smashBtn.disabled = !active;
-    relocateBtn.disabled = !active;
-  }
-
-  function restartGame() {
-    clearTimeout(cvcTimer);
-    clearTimeout(replayTimer);
-    if (replayMode) exitReplay();
-
-    state = freshState();
-    history = [];
-    busy = false;
-    hoverEdge = null;
-    pendingEdge = null;
-    selectedBlockerId = null;
-    relocateSource = null;
-    undoBtn.disabled = true;
-    replayBtn.disabled = true;
-    resetRepetition();
-
-    gameSnapshots = [snapshot()];
-    gameActions = [];
-
-    if (gameMode === 'cvc') {
-      aiPlaying = true;
-      playPauseBtn.textContent = '⏸ Pause';
-      logEl.textContent = 'Computer vs computer. Blue moves first.';
-      setStatus('<span class="turn">Blue is thinking…</span>');
-      draw();
-      scheduleAi();
-    } else {
-      aiPlaying = false;
-      setMode('move');
-      if (gameMode === 'pvp') logEl.textContent = 'Player vs Player. P1 moves first.';
-      else logEl.textContent = 'The game is ready. You move first.';
-      setStatus(`<span class="turn">${displayName('you')}'s turn.</span> ${actionHintFor()}`);
-      draw();
-    }
-  }
-
-  /* ---------- mode buttons ---------- */
-  function setMode(m) {
-    if (replayMode) return;
-    if (state.sacrifice && m !== 'sacrifice') return;
-    mode = m;
-    pendingEdge = null;
-    hoverEdge = null;
-    selectedBlockerId = null;
-    relocateSource = null;
-    moveBtn.classList.toggle('active', m === 'move');
-    blockerBtn.classList.toggle('active', m === 'blocker');
-    wallBtn.classList.toggle('active', m === 'wall');
-    smashBtn.classList.toggle('active', m === 'smash');
-    relocateBtn.classList.toggle('active', m === 'relocate');
-    if (m === 'move') hintEl.textContent = 'Click any highlighted tile to move your King there.';
-    else if (m === 'blocker') hintEl.textContent = 'Click one of your Blockers, then click a highlighted tile.';
-    else if (m === 'wall') hintEl.textContent = 'Click an edge to build a wall.';
-    else if (m === 'smash') hintEl.textContent = 'Click a wall beside your King. Green = smashable, red = protected.';
-    else if (m === 'relocate') hintEl.textContent = 'Click one of your walls, then click an empty edge.';
-    draw();
-  }
-  moveBtn.addEventListener('click', () => setMode('move'));
-  blockerBtn.addEventListener('click', () => setMode('blocker'));
-  wallBtn.addEventListener('click', () => setMode('wall'));
-  smashBtn.addEventListener('click', () => setMode('smash'));
-  relocateBtn.addEventListener('click', () => setMode('relocate'));
-
-  modeHvcBtn.addEventListener('click', () => { if (gameMode === 'hvc') return; gameMode = 'hvc'; updateModeUI(); restartGame(); });
-  modeCvcBtn.addEventListener('click', () => { if (gameMode === 'cvc') return; gameMode = 'cvc'; updateModeUI(); restartGame(); });
-  modePvpBtn.addEventListener('click', () => { if (gameMode === 'pvp') return; gameMode = 'pvp'; updateModeUI(); restartGame(); });
-
-  flipToggle.addEventListener('change', () => { flipEnabled = flipToggle.checked; draw(); });
-
-  playPauseBtn.addEventListener('click', () => {
-    if (gameMode !== 'cvc' || replayMode) return;
-    if (aiPlaying) {
-      aiPlaying = false; clearTimeout(cvcTimer); busy = false;
-      playPauseBtn.textContent = '▶ Resume';
-      setStatus('<span class="turn">Paused.</span>');
-      draw();
-    } else if (!state.over) {
-      aiPlaying = true; playPauseBtn.textContent = '⏸ Pause';
-      scheduleAi();
-    }
-  });
-  stepOnceBtn.addEventListener('click', () => {
-    if (gameMode !== 'cvc' || state.over || replayMode) return;
-    aiPlaying = false; clearTimeout(cvcTimer);
-    playPauseBtn.textContent = '▶ Resume';
-    aiTurn(state.turn);
-  });
-  speedSlider.addEventListener('input', () => { cvcSpeed = parseInt(speedSlider.value, 10); speedLabel.textContent = cvcSpeed + ' ms'; });
-
-  document.getElementById('restart').addEventListener('click', restartGame);
-  replayBtn.addEventListener('click', enterReplay);
-
-  undoBtn.addEventListener('click', () => {
-    if (replayMode || state.sacrifice) return;
-    if (gameMode === 'cvc') return;
-    if (!history.length || busy || state.over) return;
-    const prev = history.pop();
-    restore(prev.state);
-    repetitionMap = new Map(prev.rep);
-    if (gameSnapshots.length > 1) gameSnapshots.pop();
-    if (gameActions.length > 0) gameActions.pop();
-    state.over = false;
-    busy = false;
-    hoverEdge = null;
-    pendingEdge = null;
-    selectedBlockerId = null;
-    relocateSource = null;
-    undoBtn.disabled = true;
-    replayBtn.disabled = gameSnapshots.length < 2;
-    setMode('move');
-    draw();
-    setStatus(`<span class="turn">${displayName(state.turn)}'s turn.</span> Your last turn was undone.`);
-  });
-
-  /* ---------- canvas events ---------- */
-  canvas.addEventListener('pointerdown', ev => { lastPointerType = ev.pointerType || 'mouse'; });
-  canvas.addEventListener('pointermove', ev => {
-    if (ev.pointerType === 'touch') return;
-    if (replayMode) return;
-    if (state.sacrifice) return;
-    if (!isHumanTurn()) return;
-    if (state.over || busy) return;
-    if (mode !== 'wall') return;
-    const e = edgeFromPoint(ev.clientX, ev.clientY);
-    if (!sameEdge(e, hoverEdge)) { hoverEdge = e; draw(); }
-  });
-  canvas.addEventListener('pointerleave', () => { if (hoverEdge) { hoverEdge = null; draw(); } });
-
-  canvas.addEventListener('click', ev => {
-    if (replayMode) return;
-
-    if (state.sacrifice) {
-      const e = edgeFromPoint(ev.clientX, ev.clientY);
-      processSacrificeClick(e);
-      return;
-    }
-
-    if (!isHumanTurn()) return;
-    if (state.over || busy) return;
-
-    const { x: cx, y: cy } = clickToCell(ev.clientX, ev.clientY);
-
-    if (mode === 'move') {
-      if (!inside(cx, cy)) return;
-      tryMove(cx, cy);
-      return;
-    }
-
-    if (mode === 'blocker') {
-      if (!inside(cx, cy)) return;
-      const who = currentPlayer();
-      if (selectedBlockerId === null) {
-        const b = state.blockers.find(b => b.owner === who && b.x === cx && b.y === cy);
-        if (b) { selectedBlockerId = b.id; draw(); }
-        else logEl.textContent = `Click one of ${displayName(who)}'s Blockers to select it.`;
-        return;
-      }
       const b = state.blockers.find(b => b.id === selectedBlockerId);
-      if (!b) { selectedBlockerId = null; draw(); return; }
-      if (b.x === cx && b.y === cy) { selectedBlockerId = null; draw(); return; }
-      const otherB = state.blockers.find(b2 => b2.owner === who && b2.x === cx && b2.y === cy);
-      if (otherB) { selectedBlockerId = otherB.id; draw(); return; }
-      const legal = blockerMoves(b).some(m => m.x === cx && m.y === cy);
-      if (legal) tryBlockerMove(b.id, cx, cy);
-      else logEl.textContent = 'That is not a legal move for the selected Blocker.';
-      return;
-    }
-
-    if (mode === 'wall') {
-      const e = edgeFromPoint(ev.clientX, ev.clientY);
-      if (!e) { logEl.textContent = 'That spot is outside the board.'; return; }
-      if (lastPointerType === 'touch') {
-        if (!sameEdge(pendingEdge, e)) {
-          pendingEdge = e; hoverEdge = e;
-          logEl.textContent = 'Tap the highlighted edge again to build the wall there.';
-          draw();
-          return;
+      if (b) {
+        for (const m of blockerMoves(b)) {
+          ctx.beginPath();
+          ctx.arc((m.x + .5) * CELL, (m.y + .5) * CELL, 8, 0, Math.PI * 2);
+          ctx.fillStyle = '#c48a3a';
+          ctx.fill();
         }
       }
-      tryWall(e);
+    }
+  }
+
+  for (const b of state.blockers) {
+    const cx = (b.x + 0.5) * CELL, cy = (b.y + 0.5) * CELL;
+    const escapes = countEscapes(b);
+    const fill = b.owner === 'blue' ? '#3f8db3' : '#c78a45';
+    let stroke = '#14202c';
+    let sw = 3;
+    if (escapes <= 2) { stroke = '#ff5f6d'; sw = 3.5; }
+    const isSelected = (b.id === selectedBlockerId && interactive &&
+      (appMode === 'local' ? b.owner === state.turn : b.owner === myColor));
+    if (isSelected) { stroke = '#ffd166'; sw = 5; }
+    roundedSquare(cx, cy, 38, 8, fill, stroke, sw);
+    ctx.beginPath();
+    ctx.arc(cx, cy, 5, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(255,255,255,0.35)';
+    ctx.fill();
+  }
+
+  drawKing(state.blue,   '#70d6ff', kingLabel('blue'));
+  drawKing(state.orange, '#ffb86b', kingLabel('orange'));
+
+  if (interactive && mode === 'move') {
+    for (const m of kingMoves(state.turn)) {
+      ctx.beginPath();
+      ctx.arc((m.x + .5) * CELL, (m.y + .5) * CELL, 8, 0, Math.PI * 2);
+      ctx.fillStyle = '#1686a8';
+      ctx.fill();
+    }
+  }
+
+  const bc = state.blockers.filter(b => b.owner === 'blue').length;
+  const oc = state.blockers.filter(b => b.owner === 'orange').length;
+  blockerYouEl.textContent = bc;
+  blockerCpuEl.textContent = oc;
+  repCountEl.textContent = `${repetitionCount()} / ${REP_LIMIT}`;
+
+  updateBadges();
+}
+
+function kingLabel(color) {
+  if (appMode === 'local') return color === 'blue' ? 'P1' : 'P2';
+  if (myColor === color) return 'YOU';
+  return 'OPP';
+}
+
+function drawKing(p, color, label) {
+  const cx = (p.x + .5) * CELL, cy = (p.y + .5) * CELL;
+  ctx.beginPath(); ctx.arc(cx, cy, 27, 0, Math.PI * 2); ctx.fillStyle = color; ctx.fill();
+  ctx.lineWidth = 4; ctx.strokeStyle = '#14202c'; ctx.stroke();
+  ctx.fillStyle = '#10202c'; ctx.font = 'bold 13px Verdana';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(label, cx, cy);
+}
+
+function updateBadges() {
+  if (appMode === 'online' && myColor) {
+    colorBadge.style.display = '';
+    colorBadge.textContent = myColor === 'blue' ? 'You are Blue' : 'You are Orange';
+    colorBadge.className = 'badge' + (myColor === 'orange' ? ' orange' : '');
+    oppBadge.style.display = '';
+    oppBadge.textContent = currentGame && currentGame.status === 'waiting'
+      ? 'Waiting for opponent…'
+      : (state.turn === myColor ? 'Your move' : "Opponent's move");
+  } else {
+    colorBadge.style.display = 'none';
+    oppBadge.style.display = 'none';
+  }
+}
+
+/* ---------- edge geometry ---------- */
+function edgeCoords(e) {
+  if (e.type === 'h') return { x1: e.x * CELL, y1: e.y * CELL, x2: (e.x + 1) * CELL, y2: e.y * CELL };
+  return { x1: e.x * CELL, y1: e.y * CELL, x2: e.x * CELL, y2: (e.y + 1) * CELL };
+}
+function edgeLabel(e) {
+  const cells = wallCells(e);
+  if (cells.length === 2) {
+    const a = cells[0], b = cells[1];
+    return `between tiles ${a.y * N + a.x} and ${b.y * N + b.x}`;
+  }
+  return `on the border of tile ${cells[0].y * N + cells[0].x}`;
+}
+function edgeFromPoint(clientX, clientY) {
+  const r = canvas.getBoundingClientRect();
+  const px = (clientX - r.left) / r.width * SIZE;
+  const py = (clientY - r.top) / r.height * SIZE;
+  if (px < 0 || py < 0 || px >= SIZE || py >= SIZE) return null;
+  const x = Math.floor(px / CELL), y = Math.floor(py / CELL);
+  const fx = px / CELL - x, fy = py / CELL - y;
+  const cands = [];
+  if (y > 0)     cands.push({ d: fy,     e: { type: 'h', x, y } });
+  if (y < N - 1) cands.push({ d: 1 - fy, e: { type: 'h', x, y: y + 1 } });
+  if (x > 0)     cands.push({ d: fx,     e: { type: 'v', x, y } });
+  if (x < N - 1) cands.push({ d: 1 - fx, e: { type: 'v', x: x + 1, y } });
+  if (!cands.length) return null;
+  cands.sort((a, b) => a.d - b.d);
+  return cands[0].e;
+}
+
+/* =====================================================================
+   MOVE FLOW
+   ===================================================================== */
+function performMove(action) {
+  const mover = state.turn;
+  const opponent = other(mover);
+
+  applyAction(action);
+  state.moveNumber = (state.moveNumber || 0) + 1;
+
+  if (isKingTrapped(opponent)) {
+    state.over = true;
+    state.winner = mover;
+    state.turn = opponent;
+    recordPosition();
+    if (appMode === 'online') pushState();
+    draw();
+    updateStatus();
+    return;
+  }
+
+  state.turn = opponent;
+  recordPosition();
+
+  if (repetitionCount() >= REP_LIMIT) {
+    state.over = true;
+    state.winner = 'draw';
+    if (appMode === 'online') pushState();
+    draw();
+    updateStatus();
+    return;
+  }
+
+  if (appMode === 'online') pushState();
+  draw();
+  updateStatus();
+}
+
+function receiveState(newState) {
+  if (!newState) return;
+  if (typeof newState.moveNumber !== 'number') newState.moveNumber = 0;
+  if (newState.moveNumber <= (state.moveNumber || 0)) return;
+
+  state = newState;
+  recordPosition();
+  draw();
+  updateStatus();
+}
+
+async function pushState() {
+  if (!currentGame) return;
+  const payload = {
+    state: state,
+    turn: state.turn,
+    status: state.over ? 'finished' : 'playing',
+    winner: state.over ? state.winner : null
+  };
+  const { error } = await supabase.from('games').update(payload).eq('id', currentGame.id);
+  if (error) {
+    console.error('pushState failed', error);
+    logEl.textContent = 'Network error: ' + error.message;
+  }
+}
+
+/* =====================================================================
+   STATUS
+   ===================================================================== */
+function updateStatus() {
+  if (appMode === 'local') {
+    if (state.over) {
+      if (state.winner === 'draw') setStatus('<span class="turn">Draw.</span> Threefold repetition.');
+      else setStatus(`<span class="turn">${state.winner === 'blue' ? 'Blue' : 'Orange'} wins!</span> The enemy King is trapped.`);
+    } else {
+      setStatus(`<span class="turn">${state.turn === 'blue' ? 'Blue' : 'Orange'}'s turn.</span> Move a King, move a Blocker, place a wall, or smash.`);
+    }
+    return;
+  }
+  // Online
+  if (!currentGame) {
+    setStatus('Sign in and click Find Match to play online.');
+    return;
+  }
+  if (currentGame.status === 'waiting') {
+    setStatus('<span class="turn">Waiting for opponent…</span> The game will start automatically.');
+    return;
+  }
+  if (state.over) {
+    if (state.winner === 'draw') setStatus('<span class="turn">Draw.</span> Threefold repetition.');
+    else if (state.winner === myColor) setStatus('<span class="turn">You win!</span> The enemy King is trapped.');
+    else setStatus('<span class="turn">You lose.</span> Your King is trapped.');
+    return;
+  }
+  if (state.turn === myColor) {
+    setStatus('<span class="turn">Your turn.</span> Move a King, move a Blocker, place a wall, or smash.');
+  } else {
+    setStatus("<span class=\"turn\">Opponent's turn.</span> Waiting…");
+  }
+}
+function setStatus(html) { statusEl.innerHTML = html; }
+
+/* =====================================================================
+   INPUT — canvas
+   ===================================================================== */
+function tryMove(x, y) {
+  const legal = kingMoves(state.turn).some(m => m.x === x && m.y === y);
+  if (!legal) { logEl.textContent = 'Not a legal adjacent move.'; return; }
+  performMove({ kind: 'move', who: state.turn, x, y });
+}
+function tryBlockerMove(blockerId, x, y) {
+  performMove({ kind: 'move-blocker', who: state.turn, blockerId, x, y });
+  selectedBlockerId = null;
+}
+function tryWall(e) {
+  if (!e) return;
+  if (wallExists(e)) { logEl.textContent = 'There is already a wall there.'; return; }
+  hoverEdge = null;
+  pendingEdge = null;
+  performMove({ kind: 'wall', who: state.turn, e });
+}
+function trySmash(e) {
+  if (!e) return;
+  if (!wallExists(e)) { logEl.textContent = 'No wall there.'; return; }
+  if (isWallProtected(e)) { logEl.textContent = 'That wall is protected by a Blocker.'; return; }
+  if (!canSmashWall(state.turn, e)) { logEl.textContent = 'Your King can only smash an adjacent wall.'; return; }
+  performMove({ kind: 'smash', who: state.turn, e });
+}
+
+canvas.addEventListener('pointerdown', ev => { lastPointerType = ev.pointerType || 'mouse'; });
+canvas.addEventListener('pointermove', ev => {
+  if (ev.pointerType === 'touch') return;
+  if (!isInteractive() || mode !== 'wall') return;
+  const e = edgeFromPoint(ev.clientX, ev.clientY);
+  if (!sameEdge(e, hoverEdge)) { hoverEdge = e; draw(); }
+});
+canvas.addEventListener('pointerleave', () => {
+  if (hoverEdge) { hoverEdge = null; draw(); }
+});
+
+canvas.addEventListener('click', ev => {
+  if (!isInteractive()) return;
+
+  const r = canvas.getBoundingClientRect();
+  const cx = Math.floor((ev.clientX - r.left) / r.width * N);
+  const cy = Math.floor((ev.clientY - r.top) / r.height * N);
+
+  if (mode === 'move') {
+    if (!inside(cx, cy)) return;
+    tryMove(cx, cy);
+    return;
+  }
+  if (mode === 'blocker') {
+    if (!inside(cx, cy)) return;
+    const owner = appMode === 'online' ? myColor : state.turn;
+    if (selectedBlockerId === null) {
+      const b = state.blockers.find(b => b.owner === owner && b.x === cx && b.y === cy);
+      if (b) { selectedBlockerId = b.id; draw(); }
+      else logEl.textContent = 'Click one of your Blockers to select it.';
       return;
     }
-
-    if (mode === 'smash') {
-      const e = edgeFromPoint(ev.clientX, ev.clientY);
-      if (!e) { logEl.textContent = 'That spot is outside the board.'; return; }
-      trySmash(e);
-      return;
-    }
-
-    if (mode === 'relocate') {
-      const e = edgeFromPoint(ev.clientX, ev.clientY);
-      if (!e) { logEl.textContent = 'That spot is outside the board.'; return; }
-      const who = currentPlayer();
-      if (!relocateSource) {
-        if (!wallExists(e) || getWallOwner(e) !== who) { logEl.textContent = 'Click one of your own walls to pick it up.'; return; }
-        relocateSource = e;
-        logEl.textContent = 'Now click an empty edge to place the wall there.';
+    const b = state.blockers.find(b => b.id === selectedBlockerId);
+    if (!b) { selectedBlockerId = null; draw(); return; }
+    if (b.x === cx && b.y === cy) { selectedBlockerId = null; draw(); return; }
+    const legal = blockerMoves(b).some(m => m.x === cx && m.y === cy);
+    if (legal) tryBlockerMove(b.id, cx, cy);
+    else logEl.textContent = 'Not a legal move for that Blocker.';
+    return;
+  }
+  if (mode === 'wall') {
+    const e = edgeFromPoint(ev.clientX, ev.clientY);
+    if (!e) return;
+    if (lastPointerType === 'touch') {
+      if (!sameEdge(pendingEdge, e)) {
+        pendingEdge = e; hoverEdge = e;
+        logEl.textContent = 'Tap the highlighted edge again to build the wall.';
         draw();
         return;
       }
-      if (sameEdge(e, relocateSource)) { relocateSource = null; logEl.textContent = 'Relocation cancelled.'; draw(); return; }
-      if (wallExists(e)) { logEl.textContent = 'That edge already has a wall.'; return; }
-      tryRelocate(relocateSource, e);
-      return;
     }
-  });
-
-  /* ---------- rendering ---------- */
-  function setStatus(html) {
-    statusEl.innerHTML = html;
-    statusEl.classList.toggle('sacrifice', !!state.sacrifice);
+    tryWall(e);
+    return;
   }
-  function strokeEdge(e, color, width, alpha, flipped) {
-    const visE = flipped ? e : visualEdge(e);
-    const c = edgeCoords(visE);
-    ctx.save();
-    ctx.globalAlpha = alpha;
-    ctx.strokeStyle = color;
-    ctx.lineWidth = width;
-    ctx.lineCap = 'round';
-    ctx.beginPath();
-    ctx.moveTo(c.x1, c.y1);
-    ctx.lineTo(c.x2, c.y2);
-    ctx.stroke();
-    ctx.restore();
-  }
-  function roundedSquare(cx, cy, size, r, fill, stroke, strokeWidth) {
-    const x = cx - size / 2, y = cy - size / 2;
-    ctx.beginPath();
-    ctx.moveTo(x + r, y);
-    ctx.lineTo(x + size - r, y);
-    ctx.quadraticCurveTo(x + size, y, x + size, y + r);
-    ctx.lineTo(x + size, y + size - r);
-    ctx.quadraticCurveTo(x + size, y + size, x + size - r, y + size);
-    ctx.lineTo(x + r, y + size);
-    ctx.quadraticCurveTo(x, y + size, x, y + size - r);
-    ctx.lineTo(x, y + r);
-    ctx.quadraticCurveTo(x, y, x + r, y);
-    ctx.closePath();
-    if (fill) { ctx.fillStyle = fill; ctx.fill(); }
-    if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = strokeWidth || 3; ctx.stroke(); }
-  }
+  // smash
+  const e = edgeFromPoint(ev.clientX, ev.clientY);
+  if (e) trySmash(e);
+});
 
-  function draw() {
-    ctx.clearRect(0, 0, SIZE, SIZE);
-    const flipped = boardFlipped();
-
-    for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
-      const v = flipped ? { x: N - 1 - x, y: N - 1 - y } : { x, y };
-      ctx.fillStyle = ((x + y) % 2 === 0) ? '#dce7e8' : '#b4c8d0';
-      ctx.fillRect(v.x * CELL, v.y * CELL, CELL, CELL);
-      ctx.strokeStyle = '#8298a4'; ctx.lineWidth = 1;
-      ctx.strokeRect(v.x * CELL, v.y * CELL, CELL, CELL);
-      ctx.fillStyle = '#6c8290'; ctx.font = '12px Verdana'; ctx.textAlign = 'left'; ctx.textBaseline = 'top';
-      ctx.fillText(String(y * N + x), v.x * CELL + 6, v.y * CELL + 5);
-    }
-
-    ctx.strokeStyle = '#15202c'; ctx.lineWidth = 10; ctx.lineCap = 'round';
-    for (let y = 1; y < N; y++) for (let x = 0; x < N; x++) if (state.h[y][x]) {
-      const ve = flipped ? { type: 'h', x: N - 1 - x, y: N - y } : { type: 'h', x, y };
-      const c = edgeCoords(ve);
-      ctx.beginPath(); ctx.moveTo(c.x1, c.y1); ctx.lineTo(c.x2, c.y2); ctx.stroke();
-    }
-    for (let y = 0; y < N; y++) for (let x = 1; x < N; x++) if (state.v[y][x]) {
-      const ve = flipped ? { type: 'v', x: N - x, y: N - 1 - y } : { type: 'v', x, y };
-      const c = edgeCoords(ve);
-      ctx.beginPath(); ctx.moveTo(c.x1, c.y1); ctx.lineTo(c.x2, c.y2); ctx.stroke();
-    }
-    ctx.lineWidth = 8; ctx.strokeStyle = '#15202c'; ctx.strokeRect(2, 2, SIZE - 4, SIZE - 4);
-
-    const interactive = !replayMode && !state.sacrifice && isHumanTurn() && !state.over && !busy;
-
-    if (interactive && mode === 'wall') {
-      const e = pendingEdge || hoverEdge;
-      if (e) {
-        const occupied = wallExists(e);
-        strokeEdge(e, occupied ? '#ff5f6d' : '#ffd166', 13, occupied ? 0.5 : 0.8, flipped);
-      }
-    }
-
-    if (interactive && mode === 'smash') {
-      const king = state[currentPlayer()];
-      const cands = [
-        { type: 'h', x: king.x, y: king.y },
-        { type: 'h', x: king.x, y: king.y + 1 },
-        { type: 'v', x: king.x, y: king.y },
-        { type: 'v', x: king.x + 1, y: king.y }
-      ];
-      for (const e of cands) {
-        if (!wallExists(e)) continue;
-        if (isWallProtected(e)) strokeEdge(e, '#ff5f6d', 15, 0.75, flipped);
-        else strokeEdge(e, '#5ee08a', 15, 0.9, flipped);
-      }
-    }
-
-    if (interactive && mode === 'relocate') {
-      const who = currentPlayer();
-      for (let y = 0; y <= N; y++) for (let x = 0; x < N; x++) if (state.hOwner[y][x] === who) {
-        const isSrc = relocateSource && sameEdge(relocateSource, { type: 'h', x, y });
-        strokeEdge({ type: 'h', x, y }, isSrc ? '#ffd166' : '#a9c8d8', 13, 0.55, flipped);
-      }
-      for (let y = 0; y < N; y++) for (let x = 0; x <= N; x++) if (state.vOwner[y][x] === who) {
-        const isSrc = relocateSource && sameEdge(relocateSource, { type: 'v', x, y });
-        strokeEdge({ type: 'v', x, y }, isSrc ? '#ffd166' : '#a9c8d8', 13, 0.55, flipped);
-      }
-    }
-
-    if (state.sacrifice) {
-      const side = state.sacrifice.side;
-      for (let y = 0; y <= N; y++) for (let x = 0; x < N; x++) if (state.hOwner[y][x] === side) {
-        strokeEdge({ type: 'h', x, y }, '#ff5f6d', 16, 0.85, flipped);
-      }
-      for (let y = 0; y < N; y++) for (let x = 0; x <= N; x++) if (state.vOwner[y][x] === side) {
-        strokeEdge({ type: 'v', x, y }, '#ff5f6d', 16, 0.85, flipped);
-      }
-    }
-
-    if (interactive && mode === 'blocker' && selectedBlockerId !== null) {
-      const b = state.blockers.find(b => b.id === selectedBlockerId);
-      if (b) for (const m of blockerMoves(b)) {
-        const v = flipped ? { x: N - 1 - m.x, y: N - 1 - m.y } : m;
-        ctx.beginPath();
-        ctx.arc((v.x + .5) * CELL, (v.y + .5) * CELL, 8, 0, Math.PI * 2);
-        ctx.fillStyle = '#c48a3a'; ctx.fill();
-      }
-    }
-
-    if (interactive && mode === 'blocker' && selectedBlockerId === null) {
-      const who = currentPlayer();
-      for (const b of state.blockers) {
-        if (b.owner !== who) continue;
-        const v = flipped ? { x: N - 1 - b.x, y: N - 1 - b.y } : { x: b.x, y: b.y };
-        roundedSquare((v.x + .5) * CELL, (v.y + .5) * CELL, 44, 9, null, 'rgba(112,214,255,0.55)', 2);
-      }
-    }
-
-    for (const b of state.blockers) {
-      const v = flipped ? { x: N - 1 - b.x, y: N - 1 - b.y } : { x: b.x, y: b.y };
-      const cx = (v.x + 0.5) * CELL, cy = (v.y + 0.5) * CELL;
-      const esc = countEscapes(b);
-      const fill = b.owner === 'you' ? '#3f8db3' : '#c78a45';
-      let stroke = '#14202c', sw = 3;
-      if (esc <= 2) { stroke = '#ff5f6d'; sw = 3.5; }
-      if (b.id === selectedBlockerId && b.owner === currentPlayer() && interactive) { stroke = '#ffd166'; sw = 5; }
-      roundedSquare(cx, cy, 38, 8, fill, stroke, sw);
-      ctx.beginPath(); ctx.arc(cx, cy, 5, 0, Math.PI * 2);
-      ctx.fillStyle = 'rgba(255,255,255,0.35)'; ctx.fill();
-    }
-
-    const vy = flipped ? { x: N - 1 - state.you.x, y: N - 1 - state.you.y } : { x: state.you.x, y: state.you.y };
-    const vc = flipped ? { x: N - 1 - state.cpu.x, y: N - 1 - state.cpu.y } : { x: state.cpu.x, y: state.cpu.y };
-    drawKing(vy, '#70d6ff', pieceLabel('you'));
-    drawKing(vc, '#ffb86b', pieceLabel('cpu'));
-
-    if (interactive && mode === 'move') {
-      const who = currentPlayer();
-      for (const m of kingMoves(who)) {
-        const v = flipped ? { x: N - 1 - m.x, y: N - 1 - m.y } : m;
-        ctx.beginPath();
-        ctx.arc((v.x + .5) * CELL, (v.y + .5) * CELL, 8, 0, Math.PI * 2);
-        ctx.fillStyle = '#1686a8'; ctx.fill();
-      }
-    }
-
-    blockerYouEl.textContent = state.blockers.filter(b => b.owner === 'you').length;
-    blockerCpuEl.textContent = state.blockers.filter(b => b.owner === 'cpu').length;
-    wallYouEl.textContent = `${state.wallPool.you} / ${state.maxWalls.you}`;
-    wallCpuEl.textContent = `${state.wallPool.cpu} / ${state.maxWalls.cpu}`;
-    repCountEl.textContent = `${repetitionCount()} / ${REP_LIMIT}`;
-  }
-
-  function drawKing(v, color, label) {
-    const cx = (v.x + .5) * CELL, cy = (v.y + .5) * CELL;
-    ctx.beginPath(); ctx.arc(cx, cy, 27, 0, Math.PI * 2); ctx.fillStyle = color; ctx.fill();
-    ctx.lineWidth = 4; ctx.strokeStyle = '#14202c'; ctx.stroke();
-    ctx.fillStyle = '#10202c'; ctx.font = 'bold 13px Verdana';
-    ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(label, cx, cy);
-  }
-
-  /* ---------- init ---------- */
-  state = freshState();
-  updateModeUI();
-  resetRepetition();
-  gameSnapshots = [snapshot()];
+/* ---------- mode buttons ---------- */
+function setActionMode(m) {
+  mode = m;
+  pendingEdge = null;
+  hoverEdge = null;
+  selectedBlockerId = null;
+  moveBtn.classList.toggle('active', m === 'move');
+  blockerBtn.classList.toggle('active', m === 'blocker');
+  wallBtn.classList.toggle('active', m === 'wall');
+  smashBtn.classList.toggle('active', m === 'smash');
+  if (m === 'move') hintEl.textContent = 'Click any highlighted tile to move your King there.';
+  else if (m === 'blocker') hintEl.textContent = 'Click one of your Blockers, then a highlighted tile.';
+  else if (m === 'wall') hintEl.textContent = 'Point at an edge — the closest one lights up. Click to build.';
+  else hintEl.textContent = 'Click a wall beside your King. Green = smashable, red = protected.';
   draw();
+}
+moveBtn.addEventListener('click', () => setActionMode('move'));
+blockerBtn.addEventListener('click', () => setActionMode('blocker'));
+wallBtn.addEventListener('click', () => setActionMode('wall'));
+smashBtn.addEventListener('click', () => setActionMode('smash'));
+
+/* =====================================================================
+   SUPABASE — auth, presence, matchmaking
+   ===================================================================== */
+async function refreshAuthUI() {
+  const { data: { user } } = await supabase.auth.getUser();
+  currentUser = user;
+  if (user) {
+    authSignedOut.style.display = 'none';
+    authSignedIn.style.display = '';
+    userEmailEl.textContent = user.email;
+    startPresence();
+  } else {
+    authSignedOut.style.display = '';
+    authSignedIn.style.display = 'none';
+    userEmailEl.textContent = '';
+    if (presenceChannel) { supabase.removeChannel(presenceChannel); presenceChannel = null; onlineCountEl.textContent = '0'; }
+  }
+}
+
+signUpBtn.addEventListener('click', async () => {
+  const email = emailInput.value.trim();
+  const password = passwordInput.value;
+  if (!email || !password) { alert('Enter email and password.'); return; }
+  const { error } = await supabase.auth.signUp({ email, password });
+  if (error) alert(error.message);
+  else alert('Signed up. If email confirmation is on, check your inbox.');
+});
+signInBtn.addEventListener('click', async () => {
+  const email = emailInput.value.trim();
+  const password = passwordInput.value;
+  if (!email || !password) { alert('Enter email and password.'); return; }
+  const { error } = await supabase.auth.signInWithPassword({ email, password });
+  if (error) alert(error.message);
+});
+signOutBtn.addEventListener('click', async () => {
+  if (currentGame) await leaveGame();
+  await supabase.auth.signOut();
+});
+supabase.auth.onAuthStateChange(() => refreshAuthUI());
+
+/* ---------- presence ---------- */
+async function startPresence() {
+  if (presenceChannel || !currentUser) return;
+  presenceChannel = supabase.channel('online-users', {
+    config: { presence: { key: currentUser.id } }
+  });
+  presenceChannel
+    .on('presence', { event: 'sync' }, () => {
+      const s = presenceChannel.presenceState();
+      onlineCountEl.textContent = Object.keys(s).length;
+    })
+    .subscribe(async (status) => {
+      if (status === 'SUBSCRIBED') {
+        await presenceChannel.track({ online_at: new Date().toISOString() });
+      }
+    });
+}
+
+/* ---------- matchmaking ---------- */
+findMatchBtn.addEventListener('click', async () => {
+  if (!currentUser) { alert('Sign in first.'); return; }
+  matchStatusEl.textContent = 'Looking for a match…';
+  const { data, error } = await supabase.rpc('find_or_create_game');
+  if (error) { matchStatusEl.textContent = 'Error: ' + error.message; return; }
+  onGameJoined(data);
+});
+
+async function onGameJoined(game) {
+  currentGame = game;
+  myColor = (game.blue_id === currentUser.id) ? 'blue' : 'orange';
+
+  if (!game.state) {
+    state = freshState();
+    if (myColor === 'blue') {
+      await supabase.from('games').update({ state }).eq('id', game.id);
+    }
+  } else {
+    state = game.state;
+  }
+
+  resetRepetition();
+  subscribeToGame(game.id);
+  appMode = 'online';
+  updateModeUI();
+  matchPanel.style.display = '';
+
+  if (game.status === 'waiting') {
+    matchStatusEl.textContent = `You are ${myColor}. Waiting for opponent…`;
+  } else {
+    matchStatusEl.textContent = `You are ${myColor}.`;
+  }
+  logEl.textContent = game.status === 'waiting'
+    ? 'Waiting for another player to join…'
+    : 'Game started.';
+  draw();
+  updateStatus();
+}
+
+function subscribeToGame(gameId) {
+  if (gameChannel) supabase.removeChannel(gameChannel);
+  gameChannel = supabase
+    .channel('game-' + gameId)
+    .on('postgres_changes',
+      { event: 'UPDATE', schema: 'public', table: 'games', filter: `id=eq.${gameId}` },
+      (payload) => {
+        const row = payload.new;
+        currentGame = row;
+
+        if (row.status === 'playing' && !row.state) return;
+
+        if (row.state) {
+          receiveState(row.state);
+        }
+
+        if (row.status === 'waiting') {
+          updateStatus();
+        } else if (row.status === 'playing') {
+          if (state.over) return;
+          if (row.state && row.state.moveNumber === 0) {
+            // Blue just initialized; nothing to do
+          }
+          matchStatusEl.textContent = `You are ${myColor}.`;
+          if (!state.moveNumber) {
+            state = row.state || freshState();
+            resetRepetition();
+          }
+          draw();
+          updateStatus();
+        } else if (row.status === 'finished') {
+          draw();
+          updateStatus();
+        }
+      })
+    .subscribe();
+}
+
+async function leaveGame() {
+  if (!currentGame) return;
+  if (gameChannel) { await supabase.removeChannel(gameChannel); gameChannel = null; }
+  // If the game is still in progress, forfeit.
+  if (currentGame.status !== 'finished' && state && !state.over) {
+    const opp = myColor === 'blue' ? 'orange' : 'blue';
+    await supabase.from('games').update({
+      status: 'finished',
+      winner: opp,
+      state: { ...state, over: true, winner: opp }
+    }).eq('id', currentGame.id);
+  }
+  currentGame = null;
+  myColor = null;
+  appMode = 'local';
+  updateModeUI();
+  matchPanel.style.display = 'none';
+  matchStatusEl.textContent = '';
+  state = freshState();
+  resetRepetition();
+  logEl.textContent = 'Left the game.';
+  draw();
+  updateStatus();
+}
+
+leaveBtn.addEventListener('click', leaveGame);
+
+resignBtn.addEventListener('click', async () => {
+  if (!currentGame || state.over) return;
+  const opp = myColor === 'blue' ? 'orange' : 'blue';
+  state.over = true;
+  state.winner = opp;
+  await supabase.from('games').update({
+    state: { ...state },
+    status: 'finished',
+    winner: opp
+  }).eq('id', currentGame.id);
+  draw();
+  updateStatus();
+});
+
+/* ---------- mode toggle ---------- */
+function updateModeUI() {
+  onlineModeBtn.classList.toggle('active', appMode === 'online');
+  localModeBtn.classList.toggle('active', appMode === 'local');
+  findMatchBtn.disabled = appMode === 'online' && !!currentGame;
+  updateBadges();
+}
+onlineModeBtn.addEventListener('click', () => {
+  if (!currentUser) { alert('Sign in first.'); return; }
+  appMode = 'online';
+  updateModeUI();
+  updateStatus();
+  draw();
+});
+localModeBtn.addEventListener('click', () => {
+  if (currentGame) leaveGame();
+  appMode = 'local';
+  myColor = null;
+  state = freshState();
+  resetRepetition();
+  updateModeUI();
+  logEl.textContent = 'Local mode. Blue moves first.';
+  draw();
+  updateStatus();
+});
+
+/* ---------- init ---------- */
+(async () => {
+  await refreshAuthUI();
+  updateModeUI();
+  logEl.textContent = 'Sign in to play online, or use local mode to play with a friend on this device.';
+  draw();
+  updateStatus();
 })();
 </script>
 </body>
