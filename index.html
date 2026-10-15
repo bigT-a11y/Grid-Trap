@@ -70,6 +70,7 @@
           <div class="controls" style="margin-top:6px">
             <button id="signInBtn">Sign in</button>
             <button id="signUpBtn">Sign up</button>
+            <button id="guestBtn" style="grid-column:span 2">Play as Guest (anonymous)</button>
           </div>
         </div>
         <div id="authSignedIn" style="display:none">
@@ -97,6 +98,7 @@
           <button id="blockerMode">⬛ Blocker</button>
           <button id="wallMode">▰ Wall</button>
           <button id="smashMode">💥 Smash</button>
+          <button id="relocateMode">↻ Replace wall</button>
         </div>
         <p class="hint" id="actionHint">Click any highlighted tile to move your King there.</p>
       </div>
@@ -131,11 +133,11 @@
         <div class="section-title">Rules</div>
         <div class="rules">
           • Each side has <b>1 King</b> and <b>4 Blockers</b>.<br>
-          • On your turn: move your King one square (incl. diagonals), move one of your Blockers one square, place one wall on an empty edge, or <b>smash</b> an unprotected wall beside your King.<br>
+          • On your turn: move your King one square (incl. diagonals), move one of your Blockers one square, place one wall on an empty edge, <b>relocate one of your walls</b> to an empty edge, or <b>smash</b> an unprotected wall beside your King.<br>
           • A wall is <b>protected</b> if any Blocker (either side) touches any part of it, including a single shared corner.<br>
           • After every action, any Blocker with <b>no free adjacent square</b> is destroyed.<br>
           • A King is <b>trapped</b> only if it has no legal moves <i>and</i> no smashable walls.<br>
-          • <b>Draw by repetition:</b> same position (pieces, walls, side to move) three times = draw.<br><br>
+          • <b>Replace wall:</b> choose Replace wall, click one of your walls, then click an empty edge. This costs one turn and does not use a wall from your pool.<br>• <b>Draw by repetition:</b> same position (pieces, walls, side to move) three times = draw.<br><br>
           <b>Wall placement:</b> point at the board — the nearest edge lights up. Click to build there.
         </div>
       </div>
@@ -161,6 +163,7 @@ const moveBtn = document.getElementById('moveMode');
 const blockerBtn = document.getElementById('blockerMode');
 const wallBtn = document.getElementById('wallMode');
 const smashBtn = document.getElementById('smashMode');
+const relocateBtn = document.getElementById('relocateMode');
 const hintEl = document.getElementById('actionHint');
 const blockerYouEl = document.getElementById('blockerYou');
 const blockerCpuEl = document.getElementById('blockerCpu');
@@ -173,6 +176,8 @@ const emailInput = document.getElementById('emailInput');
 const passwordInput = document.getElementById('passwordInput');
 const signInBtn = document.getElementById('signInBtn');
 const signUpBtn = document.getElementById('signUpBtn');
+const guestBtn = document.getElementById('guestBtn');
+
 const signOutBtn = document.getElementById('signOutBtn');
 const findMatchBtn = document.getElementById('findMatchBtn');
 const authSignedOut = document.getElementById('authSignedOut');
@@ -195,6 +200,7 @@ let currentGame = null;
 let gameChannel = null;
 let presenceChannel = null;
 let mode = 'move';
+let relocateSource = null;
 let hoverEdge = null;
 let pendingEdge = null;
 let selectedBlockerId = null;
@@ -223,6 +229,8 @@ function freshState() {
     ],
     h: Array.from({ length: N + 1 }, () => Array(N).fill(false)),
     v: Array.from({ length: N }, () => Array(N + 1).fill(false)),
+    hOwner: Array.from({ length: N + 1 }, () => Array(N).fill(null)),
+    vOwner: Array.from({ length: N }, () => Array(N + 1).fill(null)),
     turn: 'blue',
     over: false,
     winner: null,
@@ -242,7 +250,19 @@ function occupantAt(x, y) {
 }
 
 function wallExists(e) { return e.type === 'h' ? state.h[e.y][e.x] : state.v[e.y][e.x]; }
-function setWall(e, val) { if (e.type === 'h') state.h[e.y][e.x] = val; else state.v[e.y][e.x] = val; }
+function getWallOwner(e) {
+  const grid = e.type === 'h' ? state.hOwner : state.vOwner;
+  return grid ? grid[e.y][e.x] : null;
+}
+function setWall(e, val, owner = null) {
+  if (e.type === 'h') {
+    state.h[e.y][e.x] = !!val;
+    if (state.hOwner) state.hOwner[e.y][e.x] = val ? owner : null;
+  } else {
+    state.v[e.y][e.x] = !!val;
+    if (state.vOwner) state.vOwner[e.y][e.x] = val ? owner : null;
+  }
+}
 function sameEdge(a, b) { return a && b && a.type === b.type && a.x === b.x && a.y === b.y; }
 
 function wallCells(e) {
@@ -401,6 +421,8 @@ function removeTrappedBlockers() {
 
 function applyAction(a) {
   const savedBlockers = state.blockers.map(b => ({ ...b }));
+  const savedHOwner = state.hOwner.map(r => r.slice());
+  const savedVOwner = state.vOwner.map(r => r.slice());
   let savedKingPos = null;
   if (a.kind === 'move') {
     savedKingPos = { ...state[a.who] };
@@ -409,9 +431,13 @@ function applyAction(a) {
     const b = state.blockers.find(x => x.id === a.blockerId);
     if (b) { b.x = a.x; b.y = a.y; }
   } else if (a.kind === 'wall') {
-    setWall(a.e, true);
+    setWall(a.e, true, a.who);
+  } else if (a.kind === 'relocate') {
+    setWall(a.from, false);
+    setWall(a.to, true, a.who);
   } else if (a.kind === 'smash') {
     if (isWallProtected(a.e)) return { undo: () => {}, removed: [] };
+    a.wallOwner = getWallOwner(a.e);
     setWall(a.e, false);
   }
   const removed = removeTrappedBlockers();
@@ -419,7 +445,9 @@ function applyAction(a) {
   const undo = () => {
     if (a.kind === 'move') state[a.who] = savedKingPos;
     else if (a.kind === 'wall') setWall(a.e, false);
-    else if (a.kind === 'smash') setWall(a.e, true);
+    else if (a.kind === 'relocate') { setWall(a.from, true, a.who); setWall(a.to, false); }
+    else if (a.kind === 'smash') setWall(a.e, true, a.wallOwner || null);
+    state.hOwner = savedHOwner; state.vOwner = savedVOwner;
     state.blockers = savedBlockers;
   };
   return { undo, removed };
@@ -532,6 +560,8 @@ function draw() {
       strokeEdge(e, occupied ? '#ff5f6d' : '#ffd166', 13, occupied ? 0.5 : 0.8);
     }
   }
+
+  if (interactive && mode === 'relocate' && relocateSource) strokeEdge(relocateSource, '#70d6ff', 15, 0.9);
 
   if (interactive && mode === 'smash') {
     const king = state[state.turn];
@@ -709,6 +739,8 @@ function receiveState(newState) {
   if (newState.moveNumber <= (state.moveNumber || 0)) return;
 
   state = newState;
+  if (!state.hOwner) state.hOwner = Array.from({ length: N + 1 }, () => Array(N).fill(null));
+  if (!state.vOwner) state.vOwner = Array.from({ length: N }, () => Array(N + 1).fill(null));
   recordPosition();
   draw();
   updateStatus();
@@ -738,7 +770,7 @@ function updateStatus() {
       if (state.winner === 'draw') setStatus('<span class="turn">Draw.</span> Threefold repetition.');
       else setStatus(`<span class="turn">${state.winner === 'blue' ? 'Blue' : 'Orange'} wins!</span> The enemy King is trapped.`);
     } else {
-      setStatus(`<span class="turn">${state.turn === 'blue' ? 'Blue' : 'Orange'}'s turn.</span> Move a King, move a Blocker, place a wall, or smash.`);
+      setStatus(`<span class="turn">${state.turn === 'blue' ? 'Blue' : 'Orange'}'s turn.</span> Move a King, move a Blocker, place a wall, replace a wall, or smash.`);
     }
     return;
   }
@@ -758,7 +790,7 @@ function updateStatus() {
     return;
   }
   if (state.turn === myColor) {
-    setStatus('<span class="turn">Your turn.</span> Move a King, move a Blocker, place a wall, or smash.');
+    setStatus('<span class="turn">Your turn.</span> Move a King, move a Blocker, place a wall, replace a wall, or smash.');
   } else {
     setStatus("<span class=\"turn\">Opponent's turn.</span> Waiting…");
   }
@@ -784,6 +816,17 @@ function tryWall(e) {
   pendingEdge = null;
   performMove({ kind: 'wall', who: state.turn, e });
 }
+function tryRelocate(from, to) {
+  const who = appMode === 'online' ? myColor : state.turn;
+  if (!from || !wallExists(from) || getWallOwner(from) !== who) {
+    logEl.textContent = 'That is not one of your walls. Older walls without ownership data cannot be relocated.';
+    return;
+  }
+  if (!to || wallExists(to)) { logEl.textContent = 'Choose an empty edge.'; return; }
+  performMove({ kind: 'relocate', who, from, to });
+  relocateSource = null;
+}
+
 function trySmash(e) {
   if (!e) return;
   if (!wallExists(e)) { logEl.textContent = 'No wall there.'; return; }
@@ -846,6 +889,27 @@ canvas.addEventListener('click', ev => {
     tryWall(e);
     return;
   }
+  if (mode === 'relocate') {
+    const e = edgeFromPoint(ev.clientX, ev.clientY);
+    if (!e) return;
+    const who = appMode === 'online' ? myColor : state.turn;
+    if (!relocateSource) {
+      if (!wallExists(e) || getWallOwner(e) !== who) {
+        logEl.textContent = 'Click one of your own walls to select it.';
+        return;
+      }
+      relocateSource = e;
+      logEl.textContent = 'Now click an empty edge. Click the selected wall again to cancel.';
+      draw();
+      return;
+    }
+    if (sameEdge(e, relocateSource)) {
+      relocateSource = null; logEl.textContent = 'Wall replacement cancelled.'; draw(); return;
+    }
+    if (wallExists(e)) { logEl.textContent = 'That edge already has a wall.'; return; }
+    tryRelocate(relocateSource, e);
+    return;
+  }
   // smash
   const e = edgeFromPoint(ev.clientX, ev.clientY);
   if (e) trySmash(e);
@@ -861,6 +925,7 @@ function setActionMode(m) {
   blockerBtn.classList.toggle('active', m === 'blocker');
   wallBtn.classList.toggle('active', m === 'wall');
   smashBtn.classList.toggle('active', m === 'smash');
+  relocateBtn.classList.toggle('active', m === 'relocate');
   if (m === 'move') hintEl.textContent = 'Click any highlighted tile to move your King there.';
   else if (m === 'blocker') hintEl.textContent = 'Click one of your Blockers, then a highlighted tile.';
   else if (m === 'wall') hintEl.textContent = 'Point at an edge — the closest one lights up. Click to build.';
@@ -871,6 +936,7 @@ moveBtn.addEventListener('click', () => setActionMode('move'));
 blockerBtn.addEventListener('click', () => setActionMode('blocker'));
 wallBtn.addEventListener('click', () => setActionMode('wall'));
 smashBtn.addEventListener('click', () => setActionMode('smash'));
+relocateBtn.addEventListener('click', () => setActionMode('relocate'));
 
 /* =====================================================================
    SUPABASE — auth, presence, matchmaking
@@ -881,7 +947,7 @@ async function refreshAuthUI() {
   if (user) {
     authSignedOut.style.display = 'none';
     authSignedIn.style.display = '';
-    userEmailEl.textContent = user.email;
+    userEmailEl.textContent = user.is_anonymous ? 'Guest (' + user.id.slice(0, 8) + '…)' : (user.email || 'Signed in');
     startPresence();
   } else {
     authSignedOut.style.display = '';
@@ -898,6 +964,22 @@ signUpBtn.addEventListener('click', async () => {
   const { error } = await supabase.auth.signUp({ email, password });
   if (error) alert(error.message);
   else alert('Signed up. If email confirmation is on, check your inbox.');
+});
+guestBtn.addEventListener('click', async () => {
+  guestBtn.disabled = true;
+  try {
+    const { data, error } = await supabase.auth.signInAnonymously();
+    if (error) throw error;
+    if (data.user) {
+      const { error: profileError } = await supabase.from('profiles').upsert({ id: data.user.id }, { onConflict: 'id' });
+      if (profileError) console.warn('Profile creation may be handled by a database trigger:', profileError.message);
+    }
+    await refreshAuthUI();
+  } catch (error) {
+    alert('Guest sign-in failed: ' + error.message);
+  } finally {
+    guestBtn.disabled = false;
+  }
 });
 signInBtn.addEventListener('click', async () => {
   const email = emailInput.value.trim();
@@ -950,6 +1032,8 @@ async function onGameJoined(game) {
     }
   } else {
     state = game.state;
+    if (!state.hOwner) state.hOwner = Array.from({ length: N + 1 }, () => Array(N).fill(null));
+    if (!state.vOwner) state.vOwner = Array.from({ length: N }, () => Array(N + 1).fill(null));
   }
 
   resetRepetition();
